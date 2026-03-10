@@ -1,9 +1,12 @@
 """
-    default_questionnaire_specs() -> Vector{QuestionnaireSpec}
+    default_questionnaires() -> Vector{QuestionnaireSpec}
 
 Return the default set of questionnaire specifications: PHQ-9 and GAD-7.
+
+PHQ-9 measures depression (9 items, 0–3 scale, loads on `"depression"`).
+GAD-7 measures anxiety (7 items, 0–3 scale, loads on `"anxiety"` and secondarily `"depression"`).
 """
-function default_questionnaire_specs()::Vector{QuestionnaireSpec}
+function default_questionnaires()::Vector{QuestionnaireSpec}
     return [
         QuestionnaireSpec(
             "PHQ_9", "phq9", 9, 4,
@@ -22,24 +25,29 @@ end
     make_phq9() -> QuestionnaireSpec
 
 Return a PHQ-9 questionnaire specification.
-The PHQ-9 has 9 items scored 0-3 and loads primarily on the `"depression"` latent variable.
+The PHQ-9 has 9 items scored 0–3 and loads primarily on the `"depression"` latent variable.
 """
-make_phq9() = default_questionnaire_specs()[1]
+function make_phq9()::QuestionnaireSpec
+    return QuestionnaireSpec(
+        "PHQ_9", "phq9", 9, 4,
+        [LatentLoading("depression", 2.5)],
+        0.6, 0.01,
+    )
+end
 
 """
     make_gad7() -> QuestionnaireSpec
 
 Return a GAD-7 questionnaire specification.
-The GAD-7 has 7 items scored 0-3 and loads on `"anxiety"` (and secondarily `"depression"`).
+The GAD-7 has 7 items scored 0–3 and loads on `"anxiety"` (and secondarily `"depression"`).
 """
-make_gad7() = default_questionnaire_specs()[2]
-
-"""
-    default_questionnaires() -> Vector{QuestionnaireSpec}
-
-Return the default set of questionnaires. Alias for `default_questionnaire_specs()`.
-"""
-default_questionnaires() = default_questionnaire_specs()
+function make_gad7()::QuestionnaireSpec
+    return QuestionnaireSpec(
+        "GAD_7", "gad7", 7, 4,
+        [LatentLoading("anxiety", 2.5), LatentLoading("depression", 0.8)],
+        0.6, 0.01,
+    )
+end
 
 """
     generate_questionnaire_responses(rng, spec, latents, prev_responses) -> QData

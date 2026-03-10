@@ -4,12 +4,18 @@
 A simulator for generating realistic-ish longitudinal questionnaire data,
 designed for schoolchildren completing annual surveys.
 
+Simulation uses an agent-based approach driven by latent variables (e.g.
+`"depression"`, `"anxiety"`). Each student's questionnaire responses are
+derived from their individual latent values at each wave, composed from:
+- Fixed-effect `Coefficient`s (e.g. age or sex effects)
+- Random-effect `Effect`s (e.g. school cluster, individual baseline, residual error)
+
 ## Quick start
 
 ```julia
 using IbOxDummies
 
-# Run with defaults (3 waves, 10 schools, PHQ-9 + GAD-7)
+# Run with defaults (3 waves, 10 schools, PHQ-9 + GAD-7 driven by latent depression/anxiety)
 data, schema = simulate(SimulationConfig(seed = 42))
 
 # Write as CSV (uses CSV.jl)
@@ -18,11 +24,21 @@ to_csv(data, schema)
 # Write as JSON (uses JSON3.jl)
 to_json(data, schema)
 
-# Export JSON Schema describing the output
-println(to_json_schema(schema))
-
-# Include latent variable values in the output DataFrame
+# Include latent variable values in the output for ground-truth comparison
 data, schema = simulate(SimulationConfig(seed = 42, includeLatents = true))
+# data now has l_depression and l_anxiety columns
+
+# Custom latent model
+data, schema = simulate(SimulationConfig(
+    seed            = 42,
+    latentVariables = ["depression"],
+    coefficients    = [Coefficient("depression", ["d_age"], 0.03)],
+    effects         = [
+        Effect("depression", [], ["uid"], truncated(Normal(0, 0.2), 0, Inf)),
+        Effect("depression", [], [],      Normal(0, 0.1)),  # residual error
+    ],
+    questionnaires  = [make_phq9()],
+))
 ```
 
 ## CLI
@@ -70,7 +86,6 @@ export
     make_phq9,
     make_gad7,
     default_questionnaires,
-    default_questionnaire_specs,
     generate_questionnaire_responses,
 
     # Latent variable system

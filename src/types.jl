@@ -29,9 +29,10 @@ struct Schema
     demographicsColumns::Vector{String}
     questionnaireColumns::Dict{String,String}
     latentColumns::Vector{String}
-    # Backward-compatible 2-arg constructor
-    Schema(d::Vector{String}, q::Dict{String,String}) = new(d, q, String[])
+    # 3-arg constructor (all fields explicit)
     Schema(d::Vector{String}, q::Dict{String,String}, l::Vector{String}) = new(d, q, l)
+    # 2-arg convenience constructor (no latent columns)
+    Schema(d::Vector{String}, q::Dict{String,String}) = new(d, q, String[])
 end
 
 """

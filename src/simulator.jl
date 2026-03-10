@@ -54,7 +54,7 @@ The simulation proceeds in five stages:
 5. Apply the naughty-monkey corruption function.
 """
 function simulate(config::SimulationConfig)::Tuple{DataFrame,Schema}
-    qs    = isempty(config.questionnaires)   ? default_questionnaire_specs() : config.questionnaires
+    qs    = isempty(config.questionnaires)   ? default_questionnaires()     : config.questionnaires
     lvars = isempty(config.latentVariables)  ? default_latent_variables()    : config.latentVariables
     coefs = isempty(config.coefficients)     ? default_coefficients()        : config.coefficients
     effs  = isempty(config.effects)          ? default_effects()             : config.effects
