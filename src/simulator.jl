@@ -48,9 +48,9 @@ The simulation proceeds in five stages:
 1. Generate school → yeargroup → class → student hierarchy with per-school
    perturbed demographic weight distributions.
 2. Build all (student × wave) row templates and pre-compute random effect draws.
-3. For each wave, compute latent variable values per student and generate
-   questionnaire responses from those latents.
-4. Optionally attach latent variable values as `l_*` columns.
+3. Run waves: for each student compute latent variable values then generate
+   questionnaire responses driven by those latents.
+4. Optionally attach latent variable values as `l_*` columns (within stage 3).
 5. Apply the naughty-monkey corruption function.
 """
 function simulate(config::SimulationConfig)::Tuple{DataFrame,Schema}

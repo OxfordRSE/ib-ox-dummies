@@ -424,7 +424,7 @@ using IbOxDummies
         schema2 = build_schema(qs, ["depression", "anxiety"], true)
         json_schema2 = to_json_schema(schema2)
         @test occursin("\"l_depression\"", json_schema2)
-        @test occursin("Latent variable", json_schema2)
+        @test occursin("Latent variable:", json_schema2)
     end
 
     @testset "default_naughty_monkey" begin
