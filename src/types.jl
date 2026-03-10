@@ -134,39 +134,6 @@ struct QuestionnaireSpec
 end
 
 """
-    NaughtyMonkeyFn
-
-Last-call function to randomly corrupt or remap the simulated output.
-
-Signature:
-    (rng, output::Vector{StudentDataRow}, schema::Schema) -> Vector{StudentDataRow}
-"""
-const NaughtyMonkeyFn = Function
-
-"""
-    OutputFn
-
-Custom output function.
-
-Signature:
-    (data::DataFrame, schema::Schema) -> Any
-"""
-const OutputFn = Function
-
-"""
-    DemographicsUpdateFn
-
-Function to update demographics between waves.
-
-Signature:
-    (rng, prevData::Vector{StudentDataRow}) -> StudentDataRow
-
-`prevData` contains all data for this student across all previous waves.
-Unreturned keys are copied from the most recent wave's demographics.
-"""
-const DemographicsUpdateFn = Function
-
-"""
     DemographicsSpec
 
 Specifies the demographic weight distributions used when generating student demographics.

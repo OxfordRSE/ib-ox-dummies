@@ -204,6 +204,7 @@ data, schema = simulate(SimulationConfig(
 | `RandomEffect` | Random effect on a latent variable (one draw per categorical group) |
 | `LatentLoading` | Maps a latent variable to a questionnaire item mean via a scale factor |
 | `QuestionnaireSpec` | Declarative Likert-scale questionnaire specification |
+| `DemographicsSpec` | Custom demographic weight distributions (ethnicity, sex, gender, orientation) |
 | `SimulationConfig` | All simulation parameters with sensible defaults |
 
 ### `SimulationConfig` fields
@@ -221,6 +222,7 @@ data, schema = simulate(SimulationConfig(
 | `randomEffects` | `[]` → defaults | Random effects |
 | `includeLatents` | `false` | Append `l_*` latent columns to output |
 | `demographicPerturbationSD` | `0.05` | Per-school demographic weight perturbation SD |
+| `demographicsSpec` | `nothing` → UK census defaults | Custom `DemographicsSpec` for demographic distributions |
 | `demographicsUpdateFn` | age +1 | Function updating demographics between waves |
 | `naughtyMonkey` | 0.25%/5% deletion | Function applying data-quality corruption |
 | `output` | `"csv"` | Output format (`"csv"`, `"json"`, `"schema"`, or custom `Function`) |

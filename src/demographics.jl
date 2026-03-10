@@ -263,7 +263,7 @@ function default_demographics_update(rng::AbstractRNG, prevData::Vector{StudentD
 end
 
 """
-    default_naughty_monkey(rng, output, schema) -> Vector{QData}
+    default_naughty_monkey(rng, output, schema) -> Vector{StudentDataRow}
 
 Default naughty-monkey function: removes ~0.25% of questionnaire data cells
 and ~5% of demographics data cells at random by replacing them with `missing`.
