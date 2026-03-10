@@ -28,10 +28,10 @@ end
 """
     qdata_to_dataframe(rows, schema) -> DataFrame
 
-Convert a `Vector{QData}` to a `DataFrame` with columns in canonical order.
+Convert a `Vector{StudentDataRow}` to a `DataFrame` with columns in canonical order.
 Missing values (absent keys) are represented as `missing`.
 """
-function qdata_to_dataframe(rows::Vector{QData}, schema::Schema)::DataFrame
+function qdata_to_dataframe(rows::Vector{StudentDataRow}, schema::Schema)::DataFrame
     cols = column_order(schema)
     return DataFrame(
         [col => [get(row, col, missing) for row in rows] for col in cols]
@@ -54,10 +54,11 @@ The simulation proceeds in five stages:
 5. Apply the naughty-monkey corruption function.
 """
 function simulate(config::SimulationConfig)::Tuple{DataFrame,Schema}
-    qs    = isempty(config.questionnaires)   ? default_questionnaires()     : config.questionnaires
-    lvars = isempty(config.latentVariables)  ? default_latent_variables()    : config.latentVariables
-    coefs = isempty(config.coefficients)     ? default_coefficients()        : config.coefficients
-    effs  = isempty(config.effects)          ? default_effects()             : config.effects
+    qs    = isempty(config.questionnaires)  ? default_questionnaires()    : config.questionnaires
+    lvars = isempty(config.latentVariables) ? default_latent_variables()  : config.latentVariables
+    coefs = isempty(config.linearEffects)   ? default_linear_effects()    : config.linearEffects
+    effs  = isempty(config.randomEffects)   ? default_random_effects()    : config.randomEffects
+    demo_spec = isnothing(config.demographicsSpec) ? default_demographics_spec() : config.demographicsSpec
 
     rng = isnothing(config.seed) ? MersenneTwister() : MersenneTwister(config.seed)
 
@@ -72,10 +73,10 @@ function simulate(config::SimulationConfig)::Tuple{DataFrame,Schema}
 
         # Per-school perturbed demographic weight distributions
         sd = config.demographicPerturbationSD
-        eth_wts  = perturb_weights(rng, ETHNICITY_WEIGHTS,           sd)
-        sex_wts  = perturb_weights(rng, SEX_WEIGHTS,                 sd)
-        gend_wts = perturb_weights(rng, GENDER_IDENTITY_WEIGHTS,     sd)
-        ori_wts  = perturb_weights(rng, SEXUAL_ORIENTATION_WEIGHTS,  sd)
+        eth_wts  = perturb_weights(rng, demo_spec.ethnicity,         sd)
+        sex_wts  = perturb_weights(rng, demo_spec.sex,               sd)
+        gend_wts = perturb_weights(rng, demo_spec.genderIdentity,    sd)
+        ori_wts  = perturb_weights(rng, demo_spec.sexualOrientation, sd)
 
         for yg in 1:n_yg
             n_cls = sample_count(rng, config.nClassesPerSchoolYeargroup)
@@ -99,7 +100,7 @@ function simulate(config::SimulationConfig)::Tuple{DataFrame,Schema}
     end
 
     # --- Stage 2: Build all (student × wave) templates and pre-compute effects ---
-    all_templates = QData[]
+    all_templates = StudentDataRow[]
     for wave in 1:config.nWaves, stu in struct_students
         tmpl = copy(stu.demographics)
         tmpl["wave"] = wave
@@ -109,14 +110,14 @@ function simulate(config::SimulationConfig)::Tuple{DataFrame,Schema}
     effect_draws = precompute_effect_draws(rng, effs, all_templates)
 
     # --- Initialise per-student state ---
-    student_history      = Dict{String,Vector{QData}}()
-    student_demographics = Dict{String,QData}()
+    student_history      = Dict{String,Vector{StudentDataRow}}()
+    student_demographics = Dict{String,StudentDataRow}()
     for stu in struct_students
-        student_history[stu.uid]      = QData[]
+        student_history[stu.uid]      = StudentDataRow[]
         student_demographics[stu.uid] = stu.demographics
     end
 
-    all_output = QData[]
+    all_output = StudentDataRow[]
 
     # --- Stage 3: Run waves ---
     for wave in 1:config.nWaves

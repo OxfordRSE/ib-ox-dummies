@@ -1,18 +1,18 @@
 """
-    AData
+    Response
 
 Answer data: the value of a single field for a student in a given wave.
 Can be an integer, float, string, or missing (unanswered/redacted).
 """
-const AData = Union{Int,Float64,String,Missing}
+const Response = Union{Int,Float64,String,Missing}
 
 """
-    QData
+    StudentDataRow
 
 Questionnaire data: a named record of answer data representing one row
 (one student × one wave).
 """
-const QData = Dict{String,AData}
+const StudentDataRow = Dict{String,Response}
 
 """
     Schema
@@ -68,7 +68,7 @@ truncated(Normal(30.0, 7.0), 1, Inf)  # truncated to avoid non-positive values
 const CountSpec = Union{Int,Range,UnivariateDistribution}
 
 """
-    Coefficient
+    LinearEffect
 
 A fixed linear effect on a latent variable.
 
@@ -76,14 +76,14 @@ Adds `value × ∏(inputs)` to the named `target` latent variable for each row.
 All `inputs` must name numeric columns present in the row (e.g. `"d_age"`,
 `"_sex_fm"`). If any input is non-numeric the coefficient contributes 0.
 """
-struct Coefficient
+struct LinearEffect
     target::String          # latent variable name
     inputs::Vector{String}  # numeric column names to multiply together
     value::Float64          # scaling factor
 end
 
 """
-    Effect
+    RandomEffect
 
 A random effect on a latent variable.
 
@@ -95,7 +95,7 @@ and added to the `target` latent variable.
 If `categoricalInputs` is empty, a fresh draw is taken on every evaluation,
 modelling residual / error variance.
 """
-struct Effect
+struct RandomEffect
     target::String
     numericalInputs::Vector{String}    # numeric columns that scale the draw
     categoricalInputs::Vector{String}  # columns that define groups (one draw per group)
@@ -139,7 +139,7 @@ end
 Last-call function to randomly corrupt or remap the simulated output.
 
 Signature:
-    (rng, output::Vector{QData}, schema::Schema) -> Vector{QData}
+    (rng, output::Vector{StudentDataRow}, schema::Schema) -> Vector{StudentDataRow}
 """
 const NaughtyMonkeyFn = Function
 
@@ -159,7 +159,7 @@ const OutputFn = Function
 Function to update demographics between waves.
 
 Signature:
-    (rng, prevData::Vector{QData}) -> QData
+    (rng, prevData::Vector{StudentDataRow}) -> StudentDataRow
 
 `prevData` contains all data for this student across all previous waves.
 Unreturned keys are copied from the most recent wave's demographics.
@@ -167,12 +167,27 @@ Unreturned keys are copied from the most recent wave's demographics.
 const DemographicsUpdateFn = Function
 
 """
+    DemographicsSpec
+
+Specifies the demographic weight distributions used when generating student demographics.
+Each field is a vector of `(category, weight)` pairs whose weights sum to 1.
+
+Use `default_demographics_spec()` from `demographics.jl` to get the UK-census-derived defaults.
+"""
+struct DemographicsSpec
+    ethnicity::Vector{Tuple{String,Float64}}
+    sex::Vector{Tuple{String,Float64}}
+    genderIdentity::Vector{Tuple{String,Float64}}
+    sexualOrientation::Vector{Tuple{String,Float64}}
+end
+
+"""
     SimulationConfig
 
 Holds all configuration parameters for a simulation run.
 
 Fields whose defaults are empty collections (`questionnaires`, `latentVariables`,
-`coefficients`, `effects`) are filled with sensible defaults by `simulate()` when
+`linearEffects`, `randomEffects`) are filled with sensible defaults by `simulate()` when
 left at their defaults.
 """
 Base.@kwdef struct SimulationConfig
@@ -183,12 +198,13 @@ Base.@kwdef struct SimulationConfig
     nStudentsPerClass::CountSpec = Normal(30.0, 7.0)
     questionnaires::Vector{QuestionnaireSpec} = QuestionnaireSpec[]
     latentVariables::Vector{String} = String[]
-    coefficients::Vector{Coefficient} = Coefficient[]
-    effects::Vector{Effect} = Effect[]
+    linearEffects::Vector{LinearEffect} = LinearEffect[]
+    randomEffects::Vector{RandomEffect} = RandomEffect[]
     includeLatents::Bool = false
     demographicPerturbationSD::Float64 = 0.05
-    demographicsUpdateFn::DemographicsUpdateFn = default_demographics_update
-    naughtyMonkey::NaughtyMonkeyFn = default_naughty_monkey
-    output::Union{String,OutputFn} = "csv"
+    demographicsSpec::Union{DemographicsSpec,Nothing} = nothing
+    demographicsUpdateFn::Function = default_demographics_update
+    naughtyMonkey::Function = default_naughty_monkey
+    output::Union{String,Function} = "csv"
     seed::Union{Int,Nothing} = nothing
 end

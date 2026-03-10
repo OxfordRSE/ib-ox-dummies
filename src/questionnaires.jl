@@ -50,7 +50,7 @@ function make_gad7()::QuestionnaireSpec
 end
 
 """
-    generate_questionnaire_responses(rng, spec, latents, prev_responses) -> QData
+    generate_questionnaire_responses(rng, spec, latents, prev_responses) -> StudentDataRow
 
 Generate item responses for one student at one wave.
 
@@ -68,9 +68,9 @@ function generate_questionnaire_responses(
     rng::AbstractRNG,
     spec::QuestionnaireSpec,
     latents::Dict{String,Float64},
-    prev_responses::Union{QData,Nothing},
-)::QData
-    result = QData()
+    prev_responses::Union{StudentDataRow,Nothing},
+)::StudentDataRow
+    result = StudentDataRow()
 
     # Spoiled / random response
     if rand(rng) < spec.spoilRate

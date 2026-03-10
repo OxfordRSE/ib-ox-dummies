@@ -34,15 +34,15 @@ using IbOxDummies
         @test cfg.demographicPerturbationSD == 0.05
         @test isempty(cfg.questionnaires)
         @test isempty(cfg.latentVariables)
-        @test isempty(cfg.coefficients)
-        @test isempty(cfg.effects)
+        @test isempty(cfg.linearEffects)
+        @test isempty(cfg.randomEffects)
 
         # New struct types exist
-        c = Coefficient("depression", ["d_age"], 0.02)
+        c = LinearEffect("depression", ["d_age"], 0.02)
         @test c.target == "depression"
         @test c.value == 0.02
 
-        e = Effect("anxiety", [], ["uid"], Normal(0.0, 0.1))
+        e = RandomEffect("anxiety", [], ["uid"], Normal(0.0, 0.1))
         @test e.target == "anxiety"
         @test isempty(e.numericalInputs)
 
@@ -135,15 +135,15 @@ using IbOxDummies
     end
 
     @testset "add_numeric_encodings!" begin
-        row = QData("d_sex" => "F", "yearGroup" => 3)
+        row = StudentDataRow("d_sex" => "F", "yearGroup" => 3)
         add_numeric_encodings!(row)
         @test row["_sex_fm"] == 1.0
 
-        row2 = QData("d_sex" => "M", "yearGroup" => 2)
+        row2 = StudentDataRow("d_sex" => "M", "yearGroup" => 2)
         add_numeric_encodings!(row2)
         @test row2["_sex_fm"] == -1.0
 
-        row3 = QData("d_sex" => "I")
+        row3 = StudentDataRow("d_sex" => "I")
         add_numeric_encodings!(row3)
         @test row3["_sex_fm"] == 0.0
     end
@@ -158,7 +158,7 @@ using IbOxDummies
         @test updated["d_sex"] == demo["d_sex"]  # copied unchanged
 
         # Empty history returns empty dict
-        @test isempty(default_demographics_update(rng, QData[]))
+        @test isempty(default_demographics_update(rng, StudentDataRow[]))
     end
 
     @testset "Latent variable defaults" begin
@@ -166,14 +166,14 @@ using IbOxDummies
         @test "depression" ∈ lvars
         @test "anxiety" ∈ lvars
 
-        coefs = default_coefficients()
+        coefs = default_linear_effects()
         @test !isempty(coefs)
-        @test all(c isa Coefficient for c in coefs)
+        @test all(c isa LinearEffect for c in coefs)
         @test any(c.target == "depression" for c in coefs)
 
-        effs = default_effects()
+        effs = default_random_effects()
         @test !isempty(effs)
-        @test all(e isa Effect for e in effs)
+        @test all(e isa RandomEffect for e in effs)
         @test any(e.target == "anxiety" for e in effs)
         # Error term: Effect with empty inputs
         @test any(isempty(e.categoricalInputs) && isempty(e.numericalInputs) for e in effs)
@@ -182,13 +182,13 @@ using IbOxDummies
     @testset "precompute_effect_draws" begin
         rng = MersenneTwister(42)
         effs = [
-            Effect("depression", [], ["school"], Normal(0.0, 0.1)),
-            Effect("anxiety",    [], [],          Normal(0.0, 0.05)),  # error term
+            RandomEffect("depression", [], ["school"], Normal(0.0, 0.1)),
+            RandomEffect("anxiety",    [], [],          Normal(0.0, 0.05)),  # error term
         ]
         rows = [
-            QData("school" => "School A", "uid" => "u1", "wave" => 1),
-            QData("school" => "School B", "uid" => "u2", "wave" => 1),
-            QData("school" => "School A", "uid" => "u3", "wave" => 2),
+            StudentDataRow("school" => "School A", "uid" => "u1", "wave" => 1),
+            StudentDataRow("school" => "School B", "uid" => "u2", "wave" => 1),
+            StudentDataRow("school" => "School A", "uid" => "u3", "wave" => 2),
         ]
         draws = precompute_effect_draws(rng, effs, rows)
         @test length(draws) == 2
@@ -203,10 +203,10 @@ using IbOxDummies
     @testset "compute_row_latents" begin
         rng = MersenneTwister(1)
         lvars = ["depression"]
-        coefs = [Coefficient("depression", ["d_age"], 0.02)]
-        effs  = [Effect("depression", [], ["school"], Normal(0.0, 0.1))]
+        coefs = [LinearEffect("depression", ["d_age"], 0.02)]
+        effs  = [RandomEffect("depression", [], ["school"], Normal(0.0, 0.1))]
 
-        rows = [QData("d_age" => 13, "school" => "Test School", "wave" => 1)]
+        rows = [StudentDataRow("d_age" => 13, "school" => "Test School", "wave" => 1)]
         draws = precompute_effect_draws(rng, effs, rows)
 
         lv = compute_row_latents(rng, rows[1], lvars, coefs, effs, draws)
@@ -491,8 +491,8 @@ using IbOxDummies
     @testset "qdata_to_dataframe" begin
         schema = build_schema(default_questionnaires())
         rows = [
-            QData("wave" => 1, "uid" => "abc", "school" => "Test", "phq9_1" => 2),
-            QData("wave" => 2, "uid" => "abc", "school" => "Test", "phq9_1" => missing),
+            StudentDataRow("wave" => 1, "uid" => "abc", "school" => "Test", "phq9_1" => 2),
+            StudentDataRow("wave" => 2, "uid" => "abc", "school" => "Test", "phq9_1" => missing),
         ]
         df = qdata_to_dataframe(rows, schema)
         @test df isa DataFrame

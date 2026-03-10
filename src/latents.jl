@@ -8,32 +8,32 @@ function default_latent_variables()::Vector{String}
 end
 
 """
-    default_coefficients() -> Vector{Coefficient}
+    default_linear_effects() -> Vector{LinearEffect}
 
-Return the default fixed-effect coefficients for the built-in latent variables.
+Return the default fixed-effect linear effects for the built-in latent variables.
 
 Numeric column encodings used:
 - `"d_age"`   — student age in years (≈ 10–16 for secondary school)
 - `"_sex_fm"` — effect-coded sex: Female = 1.0, Male = -1.0, other = 0.0
 """
-function default_coefficients()::Vector{Coefficient}
+function default_linear_effects()::Vector{LinearEffect}
     return [
         # Moderate positive age effect (older students report worse mental health on average)
-        Coefficient("depression", ["d_age"], 0.02),
-        Coefficient("anxiety",    ["d_age"], 0.015),
+        LinearEffect("depression", ["d_age"], 0.02),
+        LinearEffect("anxiety",    ["d_age"], 0.015),
 
         # Small sex effect (female > male on depression and anxiety scales)
-        Coefficient("depression", ["_sex_fm"], 0.05),
-        Coefficient("anxiety",    ["_sex_fm"], 0.05),
+        LinearEffect("depression", ["_sex_fm"], 0.05),
+        LinearEffect("anxiety",    ["_sex_fm"], 0.05),
 
         # Small age × sex interaction (female disadvantage grows with age)
-        Coefficient("depression", ["d_age", "_sex_fm"], 0.005),
-        Coefficient("anxiety",    ["d_age", "_sex_fm"], 0.004),
+        LinearEffect("depression", ["d_age", "_sex_fm"], 0.005),
+        LinearEffect("anxiety",    ["d_age", "_sex_fm"], 0.004),
     ]
 end
 
 """
-    default_effects() -> Vector{Effect}
+    default_random_effects() -> Vector{RandomEffect}
 
 Return the default random effects for the built-in latent variables.
 
@@ -44,39 +44,39 @@ The list captures:
 4. Individual baseline effect — major inter-individual variation (half-normal, always ≥ 0).
 5. Residual / error term — independent noise drawn fresh per observation.
 """
-function default_effects()::Vector{Effect}
+function default_random_effects()::Vector{RandomEffect}
     return [
         # 1. Small cohort (yearGroup) effect
-        Effect("depression", [], ["yearGroup"], Normal(0.0, 0.05)),
-        Effect("anxiety",    [], ["yearGroup"], Normal(0.0, 0.05)),
+        RandomEffect("depression", [], ["yearGroup"], Normal(0.0, 0.05)),
+        RandomEffect("anxiety",    [], ["yearGroup"], Normal(0.0, 0.05)),
 
         # 2. Small ethnicity × class × school cluster effect
-        Effect("depression", [], ["d_ethnicity", "class", "school"], Normal(0.0, 0.03)),
-        Effect("anxiety",    [], ["d_ethnicity", "class", "school"], Normal(0.0, 0.03)),
+        RandomEffect("depression", [], ["d_ethnicity", "class", "school"], Normal(0.0, 0.03)),
+        RandomEffect("anxiety",    [], ["d_ethnicity", "class", "school"], Normal(0.0, 0.03)),
 
         # 3. Individual × wave effect (fluctuating trajectories over time)
-        Effect("depression", [], ["uid", "wave"], Normal(0.0, 0.15)),
-        Effect("anxiety",    [], ["uid", "wave"], Normal(0.0, 0.12)),
+        RandomEffect("depression", [], ["uid", "wave"], Normal(0.0, 0.15)),
+        RandomEffect("anxiety",    [], ["uid", "wave"], Normal(0.0, 0.12)),
 
         # 4. Major individual baseline (half-normal: always >= 0)
-        Effect("depression", [], ["uid"], truncated(Normal(0.0, 0.2), 0.0, Inf)),
-        Effect("anxiety",    [], ["uid"], truncated(Normal(0.0, 0.15), 0.0, Inf)),
+        RandomEffect("depression", [], ["uid"], truncated(Normal(0.0, 0.2), 0.0, Inf)),
+        RandomEffect("anxiety",    [], ["uid"], truncated(Normal(0.0, 0.15), 0.0, Inf)),
 
         # 5. Residual error (fresh draw per observation)
-        Effect("depression", [], [], Normal(0.0, 0.1)),
-        Effect("anxiety",    [], [], Normal(0.0, 0.1)),
+        RandomEffect("depression", [], [], Normal(0.0, 0.1)),
+        RandomEffect("anxiety",    [], [], Normal(0.0, 0.1)),
     ]
 end
 
 """
-    add_numeric_encodings!(row::QData) -> QData
+    add_numeric_encodings!(row::StudentDataRow) -> StudentDataRow
 
-Compute and insert synthetic numeric columns used by `Coefficient` inputs:
+Compute and insert synthetic numeric columns used by `LinearEffect` inputs:
 - `_sex_fm`: effect-coded sex (F = 1.0, M = -1.0, other/intersex = 0.0).
 
 Modifies `row` in-place and returns it.
 """
-function add_numeric_encodings!(row::QData)::QData
+function add_numeric_encodings!(row::StudentDataRow)::StudentDataRow
     sex = get(row, "d_sex", "")
     row["_sex_fm"] = sex == "F" ? 1.0 : sex == "M" ? -1.0 : 0.0
     return row
@@ -85,7 +85,7 @@ end
 """
     precompute_effect_draws(rng, effects, rows) -> Vector{Dict{Any,Float64}}
 
-Pre-draw one random value per unique combination of `categoricalInputs` for each Effect.
+Pre-draw one random value per unique combination of `categoricalInputs` for each RandomEffect.
 
 Returns a vector (parallel to `effects`) of dicts mapping group-key tuples to
 drawn `Float64` values. Effects with empty `categoricalInputs` return an empty
@@ -93,8 +93,8 @@ dict because they draw a fresh value on every evaluation (residual error).
 """
 function precompute_effect_draws(
     rng::AbstractRNG,
-    effects::Vector{Effect},
-    rows::Vector{QData},
+    effects::Vector{RandomEffect},
+    rows::Vector{StudentDataRow},
 )::Vector{Dict{Any,Float64}}
     draws = Vector{Dict{Any,Float64}}(undef, length(effects))
     for (i, eff) in enumerate(effects)
@@ -114,27 +114,27 @@ function precompute_effect_draws(
 end
 
 """
-    compute_row_latents(rng, row, latent_names, coefficients, effects, effect_draws) -> Dict{String,Float64}
+    compute_row_latents(rng, row, latent_names, linearEffects, randomEffects, effect_draws) -> Dict{String,Float64}
 
 Compute latent variable values for a single row.
 
-Each `Coefficient` contributes `value × ∏(inputs)` to the target latent.
-Each `Effect` contributes `draw × ∏(numericalInputs)` where `draw` is looked
+Each `LinearEffect` contributes `value × ∏(inputs)` to the target latent.
+Each `RandomEffect` contributes `draw × ∏(numericalInputs)` where `draw` is looked
 up from `effect_draws` by the row's categorical group key, or drawn fresh for
 error terms (empty `categoricalInputs`).
 """
 function compute_row_latents(
     rng::AbstractRNG,
-    row::QData,
+    row::StudentDataRow,
     latent_names::Vector{String},
-    coefficients::Vector{Coefficient},
-    effects::Vector{Effect},
+    linearEffects::Vector{LinearEffect},
+    randomEffects::Vector{RandomEffect},
     effect_draws::Vector{Dict{Any,Float64}},
 )::Dict{String,Float64}
     lv = Dict{String,Float64}(name => 0.0 for name in latent_names)
 
-    # Fixed effects (Coefficients)
-    for coef in coefficients
+    # Fixed effects (LinearEffects)
+    for coef in linearEffects
         coef.target ∈ latent_names || continue
         product = coef.value
         valid = true
@@ -150,8 +150,8 @@ function compute_row_latents(
         valid && (lv[coef.target] += product)
     end
 
-    # Random effects (Effects)
-    for (i, eff) in enumerate(effects)
+    # Random effects (RandomEffects)
+    for (i, eff) in enumerate(randomEffects)
         eff.target ∈ latent_names || continue
 
         draw = if isempty(eff.categoricalInputs)

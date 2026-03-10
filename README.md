@@ -19,14 +19,14 @@ Each simulated student has latent mental-health scores (e.g. `depression`, `anxi
 evolve across waves and drive their questionnaire responses. The latent model is a simple
 structural equation model composed of two building blocks:
 
-- **`Coefficient(target, inputs, value)`** — a fixed linear effect.  
+- **`LinearEffect(target, inputs, value)`** — a fixed linear effect.  
   Adds `value × ∏(inputs)` to the named latent for every row.  
-  *Example*: an age effect `Coefficient("depression", ["d_age"], 0.02)` increases depression by 0.02 per year of age.
+  *Example*: an age effect `LinearEffect("depression", ["d_age"], 0.02)` increases depression by 0.02 per year of age.
 
-- **`Effect(target, numericalInputs, categoricalInputs, value)`** — a random effect.  
+- **`RandomEffect(target, numericalInputs, categoricalInputs, value)`** — a random effect.  
   One value is drawn from `value` per unique combination of `categoricalInputs` (e.g. one draw per school, one per student), optionally scaled by `numericalInputs`.  
   Empty `categoricalInputs` produces a fresh draw per observation (residual error).  
-  *Example*: `Effect("depression", [], ["uid"], truncated(Normal(0, 0.2), 0, Inf))` gives each student a stable half-normal baseline.
+  *Example*: `RandomEffect("depression", [], ["uid"], truncated(Normal(0, 0.2), 0, Inf))` gives each student a stable half-normal baseline.
 
 **Default model** (used when you call `simulate()` with no custom configuration):
 
@@ -181,10 +181,10 @@ data, schema = simulate(config)
 data, schema = simulate(SimulationConfig(
     seed            = 42,
     latentVariables = ["depression"],
-    coefficients    = [Coefficient("depression", ["d_age"], 0.03)],
-    effects         = [
-        Effect("depression", [], ["uid"],  truncated(Normal(0, 0.2), 0, Inf)),
-        Effect("depression", [], [],       Normal(0, 0.1)),  # residual error
+    linearEffects = [LinearEffect("depression", ["d_age"], 0.03)],
+    randomEffects = [
+        RandomEffect("depression", [], ["uid"],  truncated(Normal(0, 0.2), 0, Inf)),
+        RandomEffect("depression", [], [],       Normal(0, 0.1)),  # residual error
     ],
     questionnaires  = [make_phq9()],
     includeLatents  = true,
@@ -195,13 +195,13 @@ data, schema = simulate(SimulationConfig(
 
 | Type | Description |
 |------|-------------|
-| `AData` | `Union{Int, Float64, String, Missing}` — a single answer |
-| `QData` | `Dict{String, AData}` — internal per-student-wave record |
+| `Response` | `Union{Int, Float64, String, Missing}` — a single answer |
+| `StudentDataRow` | `Dict{String, Response}` — internal per-student-wave record |
 | `Schema` | Column metadata (demographics, questionnaire, and latent columns) |
 | `Range` | Inclusive integer range `[min, max]` |
 | `CountSpec` | `Union{Int, Range, UnivariateDistribution}` — count specification |
-| `Coefficient` | Fixed linear effect on a latent variable |
-| `Effect` | Random effect on a latent variable (one draw per categorical group) |
+| `LinearEffect` | Fixed linear effect on a latent variable |
+| `RandomEffect` | Random effect on a latent variable (one draw per categorical group) |
 | `LatentLoading` | Maps a latent variable to a questionnaire item mean via a scale factor |
 | `QuestionnaireSpec` | Declarative Likert-scale questionnaire specification |
 | `SimulationConfig` | All simulation parameters with sensible defaults |
@@ -217,8 +217,8 @@ data, schema = simulate(SimulationConfig(
 | `nStudentsPerClass` | `Normal(30,7)` | Count spec for students per class |
 | `questionnaires` | `[]` → default PHQ-9 + GAD-7 | Vector of `QuestionnaireSpec` |
 | `latentVariables` | `[]` → `["depression","anxiety"]` | Latent variable names |
-| `coefficients` | `[]` → defaults | Fixed linear effects |
-| `effects` | `[]` → defaults | Random effects |
+| `linearEffects` | `[]` → defaults | Fixed linear effects |
+| `randomEffects` | `[]` → defaults | Random effects |
 | `includeLatents` | `false` | Append `l_*` latent columns to output |
 | `demographicPerturbationSD` | `0.05` | Per-school demographic weight perturbation SD |
 | `demographicsUpdateFn` | age +1 | Function updating demographics between waves |

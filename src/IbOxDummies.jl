@@ -7,8 +7,8 @@ designed for schoolchildren completing annual surveys.
 Simulation uses an agent-based approach driven by latent variables (e.g.
 `"depression"`, `"anxiety"`). Each student's questionnaire responses are
 derived from their individual latent values at each wave, composed from:
-- Fixed-effect `Coefficient`s (e.g. age or sex effects)
-- Random-effect `Effect`s (e.g. school cluster, individual baseline, residual error)
+- Fixed-effect `LinearEffect`s (e.g. age or sex effects)
+- Random-effect `RandomEffect`s (e.g. school cluster, individual baseline, residual error)
 
 ## Quick start
 
@@ -30,12 +30,12 @@ data, schema = simulate(SimulationConfig(seed = 42, includeLatents = true))
 
 # Custom latent model
 data, schema = simulate(SimulationConfig(
-    seed            = 42,
+    seed          = 42,
     latentVariables = ["depression"],
-    coefficients    = [Coefficient("depression", ["d_age"], 0.03)],
-    effects         = [
-        Effect("depression", [], ["uid"], truncated(Normal(0, 0.2), 0, Inf)),
-        Effect("depression", [], [],      Normal(0, 0.1)),  # residual error
+    linearEffects = [LinearEffect("depression", ["d_age"], 0.03)],
+    randomEffects = [
+        RandomEffect("depression", [], ["uid"], truncated(Normal(0, 0.2), 0, Inf)),
+        RandomEffect("depression", [], [],      Normal(0, 0.1)),  # residual error
     ],
     questionnaires  = [make_phq9()],
 ))
@@ -68,18 +68,16 @@ include("cli.jl")
 
 export
     # Core types
-    AData,
-    QData,
+    Response,
+    StudentDataRow,
     Schema,
     Range,
     CountSpec,
-    Coefficient,
-    Effect,
+    LinearEffect,
+    RandomEffect,
     LatentLoading,
     QuestionnaireSpec,
-    NaughtyMonkeyFn,
-    OutputFn,
-    DemographicsUpdateFn,
+    DemographicsSpec,
     SimulationConfig,
 
     # Questionnaire factories (return QuestionnaireSpec)
@@ -90,13 +88,14 @@ export
 
     # Latent variable system
     default_latent_variables,
-    default_coefficients,
-    default_effects,
+    default_linear_effects,
+    default_random_effects,
     add_numeric_encodings!,
     precompute_effect_draws,
     compute_row_latents,
 
     # Demographics helpers
+    default_demographics_spec,
     default_demographics_update,
     default_naughty_monkey,
     generate_demographics,

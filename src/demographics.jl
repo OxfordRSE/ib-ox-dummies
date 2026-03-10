@@ -76,6 +76,20 @@ const SEX_WEIGHTS = [
 ]
 
 """
+    default_demographics_spec() -> DemographicsSpec
+
+Return a `DemographicsSpec` built from UK 2021 Census approximate distributions.
+"""
+function default_demographics_spec()::DemographicsSpec
+    return DemographicsSpec(
+        ETHNICITY_WEIGHTS,
+        SEX_WEIGHTS,
+        GENDER_IDENTITY_WEIGHTS,
+        SEXUAL_ORIENTATION_WEIGHTS,
+    )
+end
+
+"""
     weighted_sample(rng, options)
 
 Sample one item from a weighted list of `(value, weight)` pairs using
@@ -186,7 +200,7 @@ function perturb_weights(
 end
 
 """
-    generate_demographics(rng, school_name, yeargroup, school_year, class_label, uid; ...) -> QData
+    generate_demographics(rng, school_name, yeargroup, school_year, class_label, uid; ...) -> StudentDataRow
 
 Generate initial demographics for one student.
 
@@ -204,7 +218,7 @@ function generate_demographics(
     sex_weights::Vector{Tuple{String,Float64}}          = SEX_WEIGHTS,
     gender_weights::Vector{Tuple{String,Float64}}       = GENDER_IDENTITY_WEIGHTS,
     orientation_weights::Vector{Tuple{String,Float64}}  = SEXUAL_ORIENTATION_WEIGHTS,
-)::QData
+)::StudentDataRow
     sex = weighted_sample(rng, sex_weights)
     name = generate_name(rng, sex)
     age = 9 + school_year  # approximate age from school year
@@ -212,7 +226,7 @@ function generate_demographics(
     sexual_orientation = weighted_sample(rng, orientation_weights)
     gender_identity = weighted_sample(rng, gender_weights)
 
-    return QData(
+    return StudentDataRow(
         "uid"          => uid,
         "name"         => name,
         "school"       => school_name,
@@ -228,13 +242,13 @@ function generate_demographics(
 end
 
 """
-    default_demographics_update(rng, prevData) -> QData
+    default_demographics_update(rng, prevData) -> StudentDataRow
 
 Default demographics update function. Increments age by 1 and otherwise
 copies forward all demographics from the most recent wave.
 """
-function default_demographics_update(rng::AbstractRNG, prevData::Vector{QData})::QData
-    isempty(prevData) && return QData()
+function default_demographics_update(rng::AbstractRNG, prevData::Vector{StudentDataRow})::StudentDataRow
+    isempty(prevData) && return StudentDataRow()
     latest = prevData[end]
     updated = copy(latest)
 
@@ -256,9 +270,9 @@ and ~5% of demographics data cells at random by replacing them with `missing`.
 """
 function default_naughty_monkey(
     rng::AbstractRNG,
-    output::Vector{QData},
+    output::Vector{StudentDataRow},
     schema::Schema,
-)::Vector{QData}
+)::Vector{StudentDataRow}
     result = deepcopy(output)
     q_cols = collect(keys(schema.questionnaireColumns))
     d_cols = schema.demographicsColumns
