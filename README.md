@@ -189,6 +189,16 @@ data, schema = simulate(SimulationConfig(
     questionnaires  = [make_phq9()],
     includeLatents  = true,
 ))
+
+# Custom demographics: override sex distribution and add a Faker-based city field
+using Faker
+data, schema = simulate(SimulationConfig(
+    seed = 42,
+    demographicsSpec = DemographicsSpec(
+        sex = [("M", 0.45), ("F", 0.45), ("I", 0.10)],
+        customFields = Dict{String,Function}("d_city" => Faker.city),
+    ),
+))
 ```
 
 ### Key types
@@ -204,7 +214,7 @@ data, schema = simulate(SimulationConfig(
 | `RandomEffect` | Random effect on a latent variable (one draw per categorical group) |
 | `LatentLoading` | Maps a latent variable to a questionnaire item mean via a scale factor |
 | `QuestionnaireSpec` | Declarative Likert-scale questionnaire specification |
-| `DemographicsSpec` | Custom demographic weight distributions (ethnicity, sex, gender, orientation) |
+| `DemographicsSpec` | Categorical weight distributions + optional Faker-based custom fields (ethnicity, sex, gender, orientation, and arbitrary `customFields`) |
 | `SimulationConfig` | All simulation parameters with sensible defaults |
 
 ### `SimulationConfig` fields

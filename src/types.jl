@@ -139,13 +139,18 @@ end
 Specifies the demographic weight distributions used when generating student demographics.
 Each field is a vector of `(category, weight)` pairs whose weights sum to 1.
 
+The optional `customFields` dictionary maps output column names to zero-argument
+functions that produce a value (e.g. `Dict("d_city" => () -> Faker.city())`).
+These fields are included in every generated `StudentDataRow` and in the `Schema`.
+
 Use `default_demographics_spec()` from `demographics.jl` to get the UK-census-derived defaults.
 """
-struct DemographicsSpec
-    ethnicity::Vector{Tuple{String,Float64}}
-    sex::Vector{Tuple{String,Float64}}
-    genderIdentity::Vector{Tuple{String,Float64}}
-    sexualOrientation::Vector{Tuple{String,Float64}}
+Base.@kwdef struct DemographicsSpec
+    ethnicity::Vector{Tuple{String,Float64}}         = []
+    sex::Vector{Tuple{String,Float64}}               = []
+    genderIdentity::Vector{Tuple{String,Float64}}    = []
+    sexualOrientation::Vector{Tuple{String,Float64}} = []
+    customFields::Dict{String,Function}              = Dict{String,Function}()
 end
 
 """

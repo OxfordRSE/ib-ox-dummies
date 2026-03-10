@@ -51,8 +51,8 @@ function default_random_effects()::Vector{RandomEffect}
         RandomEffect("anxiety",    [], ["yearGroup"], Normal(0.0, 0.05)),
 
         # 2. Small ethnicity × class × school cluster effect
-        RandomEffect("depression", [], ["d_ethnicity", "class", "school"], Normal(0.0, 0.03)),
-        RandomEffect("anxiety",    [], ["d_ethnicity", "class", "school"], Normal(0.0, 0.03)),
+        RandomEffect("depression", [], ["d_ethnicity", "class", "_school_id"], Normal(0.0, 0.03)),
+        RandomEffect("anxiety",    [], ["d_ethnicity", "class", "_school_id"], Normal(0.0, 0.03)),
 
         # 3. Individual × wave effect (fluctuating trajectories over time)
         RandomEffect("depression", [], ["uid", "wave"], Normal(0.0, 0.15)),

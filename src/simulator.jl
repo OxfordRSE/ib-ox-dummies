@@ -1,17 +1,22 @@
 """
-    build_schema(questionnaires; latent_variables, include_latents) -> Schema
+    build_schema(questionnaires; latent_variables, include_latents, custom_demo_cols) -> Schema
 
 Build a `Schema` from the given questionnaire specifications.
+`custom_demo_cols` are additional column names from `DemographicsSpec.customFields`.
 """
 function build_schema(
     questionnaires::Vector{QuestionnaireSpec},
     latent_variables::Vector{String} = String[],
     include_latents::Bool = false,
+    custom_demo_cols::Vector{String} = String[],
 )::Schema
-    demo_cols = [
-        "wave", "uid", "name", "school", "yearGroup", "schoolYear", "class",
-        "d_age", "d_sex", "d_ethnicity", "d_sexualOrientation", "d_genderIdentity",
-    ]
+    demo_cols = vcat(
+        [
+            "wave", "uid", "name", "school", "yearGroup", "schoolYear", "class",
+            "d_age", "d_sex", "d_ethnicity", "d_sexualOrientation", "d_genderIdentity",
+        ],
+        custom_demo_cols,
+    )
 
     q_cols = Dict{String,String}()
     for spec in questionnaires
@@ -62,21 +67,25 @@ function simulate(config::SimulationConfig)::Tuple{DataFrame,Schema}
 
     rng = isnothing(config.seed) ? MersenneTwister() : MersenneTwister(config.seed)
 
-    schema = build_schema(qs, lvars, config.includeLatents)
+    custom_demo_cols = sort(collect(keys(demo_spec.customFields)))
+    schema = build_schema(qs, lvars, config.includeLatents, custom_demo_cols)
 
     # --- Stage 1: Generate school/yeargroup/class/student structure ---
     struct_students = []
 
     for s_id in 1:config.nSchools
-        school_name = generate_school_name(rng, s_id)
+        school_name = generate_school_name(s_id)
+        school_id   = "s_$s_id"       # deterministic ID used for random effect grouping
         n_yg = sample_count(rng, config.nYeargroupsPerSchool)
 
         # Per-school perturbed demographic weight distributions
+        # If a spec field is empty, fall back to the UK census defaults
+        defaults = default_demographics_spec()
         sd = config.demographicPerturbationSD
-        eth_wts  = perturb_weights(rng, demo_spec.ethnicity,         sd)
-        sex_wts  = perturb_weights(rng, demo_spec.sex,               sd)
-        gend_wts = perturb_weights(rng, demo_spec.genderIdentity,    sd)
-        ori_wts  = perturb_weights(rng, demo_spec.sexualOrientation, sd)
+        eth_wts  = perturb_weights(rng, isempty(demo_spec.ethnicity)         ? defaults.ethnicity         : demo_spec.ethnicity,         sd)
+        sex_wts  = perturb_weights(rng, isempty(demo_spec.sex)               ? defaults.sex               : demo_spec.sex,               sd)
+        gend_wts = perturb_weights(rng, isempty(demo_spec.genderIdentity)    ? defaults.genderIdentity    : demo_spec.genderIdentity,    sd)
+        ori_wts  = perturb_weights(rng, isempty(demo_spec.sexualOrientation) ? defaults.sexualOrientation : demo_spec.sexualOrientation, sd)
 
         for yg in 1:n_yg
             n_cls = sample_count(rng, config.nClassesPerSchoolYeargroup)
@@ -91,7 +100,9 @@ function simulate(config::SimulationConfig)::Tuple{DataFrame,Schema}
                         sex_weights         = sex_wts,
                         gender_weights      = gend_wts,
                         orientation_weights = ori_wts,
+                        custom_fields       = demo_spec.customFields,
                     )
+                    demo["_school_id"] = school_id   # internal deterministic grouping key
                     add_numeric_encodings!(demo)
                     push!(struct_students, (uid = uid, demographics = demo))
                 end

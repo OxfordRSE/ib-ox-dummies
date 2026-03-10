@@ -1,33 +1,3 @@
-# UK-typical name lists used for generating realistic student names
-const FIRST_NAMES_MALE = [
-    "James", "Oliver", "Harry", "Jack", "George", "Noah", "Charlie", "Jacob",
-    "Alfie", "Freddie", "Oscar", "Archie", "Henry", "Leo", "William", "Thomas",
-    "Ethan", "Joshua", "Mohammed", "Liam", "Lucas", "Mason", "Elijah", "Daniel",
-    "Rayan", "Adam", "Max", "Samuel", "Logan", "Dylan",
-]
-
-const FIRST_NAMES_FEMALE = [
-    "Olivia", "Amelia", "Isla", "Ava", "Emily", "Isabella", "Mia", "Poppy",
-    "Ella", "Lily", "Jessica", "Sophie", "Grace", "Evie", "Florence", "Alice",
-    "Freya", "Charlotte", "Daisy", "Sophia", "Layla", "Ruby", "Sienna", "Zara",
-    "Ellie", "Millie", "Phoebe", "Evelyn", "Hannah", "Rosie",
-]
-
-const FIRST_NAMES_NB = [
-    "Alex", "Jordan", "Morgan", "Robin", "Taylor", "Casey", "Riley", "Avery",
-    "Quinn", "Cameron", "Jesse", "Skyler", "Drew", "Frankie", "Jamie",
-]
-
-const LAST_NAMES = [
-    "Smith", "Jones", "Williams", "Taylor", "Brown", "Davies", "Evans", "Wilson",
-    "Thomas", "Roberts", "Johnson", "Lewis", "Walker", "Robinson", "Wood",
-    "Thompson", "White", "Watson", "Jackson", "Wright", "Green", "Harris",
-    "Cooper", "King", "Lee", "Martin", "Clarke", "James", "Morgan", "Hughes",
-    "Edwards", "Hill", "Moore", "Clark", "Harrison", "Scott", "Young", "Morris",
-    "Hall", "Ward", "Turner", "Carter", "Phillips", "Mitchell", "Patel", "Khan",
-    "Ali", "Ahmed", "Singh", "Kumar",
-]
-
 # UK 2021 Census approximate ethnicity distribution (simplified)
 const ETHNICITY_WEIGHTS = [
     ("White British",          0.748),
@@ -82,10 +52,10 @@ Return a `DemographicsSpec` built from UK 2021 Census approximate distributions.
 """
 function default_demographics_spec()::DemographicsSpec
     return DemographicsSpec(
-        ETHNICITY_WEIGHTS,
-        SEX_WEIGHTS,
-        GENDER_IDENTITY_WEIGHTS,
-        SEXUAL_ORIENTATION_WEIGHTS,
+        ethnicity          = ETHNICITY_WEIGHTS,
+        sex                = SEX_WEIGHTS,
+        genderIdentity     = GENDER_IDENTITY_WEIGHTS,
+        sexualOrientation  = SEXUAL_ORIENTATION_WEIGHTS,
     )
 end
 
@@ -129,42 +99,36 @@ function generate_uid(rng::AbstractRNG)::String
 end
 
 """
-    generate_name(rng, sex) -> String
+    generate_name(sex) -> String
 
-Generate a plausible full name given the sex code ("M", "F", or other).
+Generate a plausible full name given the sex code ("M", "F", or other) using Faker.jl.
 """
-function generate_name(rng::AbstractRNG, sex::String)::String
+function generate_name(sex::String)::String
     first = if sex == "M"
-        FIRST_NAMES_MALE[rand(rng, 1:length(FIRST_NAMES_MALE))]
+        Faker.first_name("M")
     elseif sex == "F"
-        FIRST_NAMES_FEMALE[rand(rng, 1:length(FIRST_NAMES_FEMALE))]
+        Faker.first_name("F")
     else
-        FIRST_NAMES_NB[rand(rng, 1:length(FIRST_NAMES_NB))]
+        Faker.first_name()
     end
-    last = LAST_NAMES[rand(rng, 1:length(LAST_NAMES))]
-    return "$first $last"
+    return "$first $(Faker.last_name())"
 end
 
 """
-    generate_school_name(rng, idx) -> String
+    generate_school_name(idx) -> String
 
-Generate a plausible UK school name.
+Generate a school name using a Faker city name combined with a deterministic
+school type (cycled by `idx` so consecutive schools vary).
 """
-function generate_school_name(rng::AbstractRNG, idx::Int)::String
-    places = [
-        "Islington", "Hackney", "Newham", "Southwark", "Lambeth",
-        "Camden", "Greenwich", "Lewisham", "Haringey", "Wandsworth",
-        "Oxfordshire", "Bristol", "Manchester", "Leeds", "Sheffield",
-        "Birmingham", "Liverpool", "Nottingham", "Leicester", "Newcastle",
-    ]
+function generate_school_name(idx::Int)::String
     types = [
         "High School", "Grammar School", "Academy", "College",
         "Community School", "Free School", "Academy of Arts",
         "Secondary School", "Comprehensive", "Studio School",
     ]
-    place = places[mod1(idx, length(places))]
-    typ   = types[rand(rng, 1:length(types))]
-    return "$place $typ"
+    city = Faker.city()                     # display name — not used as a group key
+    typ  = types[mod1(idx, length(types))]  # deterministic type cycle
+    return "$city $typ"
 end
 
 """
@@ -206,6 +170,8 @@ Generate initial demographics for one student.
 
 Keyword arguments allow passing school-specific perturbed weight distributions
 (from `perturb_weights`) to introduce realistic inter-school variation.
+`custom_fields` is a `Dict{String,Function}` of zero-argument field generators
+(e.g. from `DemographicsSpec.customFields`) added verbatim to the row.
 """
 function generate_demographics(
     rng::AbstractRNG,
@@ -218,15 +184,16 @@ function generate_demographics(
     sex_weights::Vector{Tuple{String,Float64}}          = SEX_WEIGHTS,
     gender_weights::Vector{Tuple{String,Float64}}       = GENDER_IDENTITY_WEIGHTS,
     orientation_weights::Vector{Tuple{String,Float64}}  = SEXUAL_ORIENTATION_WEIGHTS,
+    custom_fields::Dict{String,Function}                = Dict{String,Function}(),
 )::StudentDataRow
     sex = weighted_sample(rng, sex_weights)
-    name = generate_name(rng, sex)
+    name = generate_name(sex)
     age = 9 + school_year  # approximate age from school year
     ethnicity = weighted_sample(rng, ethnicity_weights)
     sexual_orientation = weighted_sample(rng, orientation_weights)
     gender_identity = weighted_sample(rng, gender_weights)
 
-    return StudentDataRow(
+    row = StudentDataRow(
         "uid"          => uid,
         "name"         => name,
         "school"       => school_name,
@@ -239,6 +206,12 @@ function generate_demographics(
         "d_sexualOrientation" => sexual_orientation,
         "d_genderIdentity"    => gender_identity,
     )
+
+    for (col, fn) in custom_fields
+        row[col] = fn()
+    end
+
+    return row
 end
 
 """

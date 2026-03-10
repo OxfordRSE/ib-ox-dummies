@@ -57,6 +57,7 @@ using Tables
 using CSV
 using JSON3
 using ArgParse
+using Faker
 
 include("types.jl")
 include("demographics.jl")

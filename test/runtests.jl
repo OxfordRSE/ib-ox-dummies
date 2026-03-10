@@ -36,6 +36,12 @@ using IbOxDummies
         @test isempty(cfg.latentVariables)
         @test isempty(cfg.linearEffects)
         @test isempty(cfg.randomEffects)
+        @test isnothing(cfg.demographicsSpec)
+
+        # DemographicsSpec with customFields
+        ds = DemographicsSpec(customFields = Dict{String,Function}("d_city" => () -> "TestCity"))
+        @test haskey(ds.customFields, "d_city")
+        @test ds.customFields["d_city"]() == "TestCity"
 
         # New struct types exist
         c = LinearEffect("depression", ["d_age"], 0.02)
@@ -109,6 +115,8 @@ using IbOxDummies
         @test haskey(demo, "uid")
         @test demo["uid"] == "abc123xyz"
         @test haskey(demo, "name")
+        @test demo["name"] isa String
+        @test !isempty(demo["name"])     # Faker produces a non-empty name
         @test haskey(demo, "d_sex")
         @test demo["d_sex"] in ("M", "F", "I")
         @test haskey(demo, "d_ethnicity")
@@ -118,6 +126,14 @@ using IbOxDummies
         @test demo["schoolYear"] == 3
         @test demo["class"] == "3a"
         @test demo["school"] == "Test School"
+
+        # Custom fields are included in the row
+        demo_with_custom = generate_demographics(
+            rng, "Test School", 1, 1, "1a", "xyz789abc";
+            custom_fields = Dict{String,Function}("d_city" => () -> "Oxford"),
+        )
+        @test haskey(demo_with_custom, "d_city")
+        @test demo_with_custom["d_city"] == "Oxford"
     end
 
     @testset "perturb_weights" begin
@@ -319,6 +335,26 @@ using IbOxDummies
             @test v isa Int
             @test 0 <= v <= 3
         end
+    end
+
+    @testset "Full simulation with DemographicsSpec customFields" begin
+        config = SimulationConfig(
+            nWaves    = 1,
+            nSchools  = 1,
+            nYeargroupsPerSchool = 1,
+            nClassesPerSchoolYeargroup = 1,
+            nStudentsPerClass = 3,
+            seed      = 13,
+            demographicsSpec = DemographicsSpec(
+                customFields = Dict{String,Function}("d_city" => () -> "Oxford"),
+            ),
+        )
+        data, schema = simulate(config)
+
+        # Custom field appears in output and schema
+        @test "d_city" in names(data)
+        @test "d_city" in schema.demographicsColumns
+        @test all(==("Oxford"), skipmissing(data[!, "d_city"]))
     end
 
     @testset "Full simulation with includeLatents" begin
