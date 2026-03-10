@@ -13,7 +13,6 @@ Supported formats:
 - `"unif(1,10)"` or `"uniform(1,10)"` → `DiscreteUniform(1, 10)`
 - `"exp(0.1)"` or `"exponential(0.1)"` → `Exponential(10.0)` (mean=1/rate)
 - `"gamma(2,3)"` → `Gamma(2.0, 3.0)` (shape, scale)
-- `"beta(2,5)"` → `Beta(2.0, 5.0)` (applied to interval [0,1], scaled externally)
 """
 function parse_count_spec(s::AbstractString)::CountSpec
     s = strip(s)
