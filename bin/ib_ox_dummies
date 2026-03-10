@@ -1,0 +1,14 @@
+#!/usr/bin/env julia
+# IbOxDummies CLI entry point
+# Usage: ib_ox_dummies [OPTIONS]
+
+# Locate the package relative to this script
+const _SCRIPT_DIR = @__DIR__
+const _PKG_DIR    = joinpath(_SCRIPT_DIR, "..")
+
+# Activate the package environment so stdlib deps resolve correctly
+import Pkg
+Pkg.activate(_PKG_DIR; io = devnull)
+
+using IbOxDummies
+IbOxDummies.ib_ox_dummies_cli(ARGS)
