@@ -31,12 +31,12 @@ function build_schema(
 end
 
 """
-    qdata_to_dataframe(rows, schema) -> DataFrame
+    rows_to_dataframe(rows, schema) -> DataFrame
 
 Convert a `Vector{StudentDataRow}` to a `DataFrame` with columns in canonical order.
 Missing values (absent keys) are represented as `missing`.
 """
-function qdata_to_dataframe(rows::Vector{StudentDataRow}, schema::Schema)::DataFrame
+function rows_to_dataframe(rows::Vector{StudentDataRow}, schema::Schema)::DataFrame
     cols = column_order(schema)
     return DataFrame(
         [col => [get(row, col, missing) for row in rows] for col in cols]
@@ -182,5 +182,5 @@ function simulate(config::SimulationConfig)::Tuple{DataFrame,Schema}
     # --- Stage 5: Apply naughty monkey ---
     all_output = config.naughtyMonkey(rng, all_output, schema)
 
-    return qdata_to_dataframe(all_output, schema), schema
+    return rows_to_dataframe(all_output, schema), schema
 end

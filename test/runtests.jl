@@ -105,7 +105,19 @@ using IbOxDummies
         @test parse_count_spec("1:5") == Range(1, 5)
         @test parse_count_spec("1,5") == Range(1, 5)
         @test parse_count_spec("norm(30,7)") == Normal(30.0, 7.0)
+        @test parse_count_spec("normal(30,7)") == Normal(30.0, 7.0)
         @test parse_count_spec("dnorm(30,7)") == Normal(30.0, 7.0)
+        @test parse_count_spec("pois(5)") == Poisson(5.0)
+        @test parse_count_spec("poisson(5)") == Poisson(5.0)
+        @test parse_count_spec("negbinom(5,0.5)") == NegativeBinomial(5, 0.5)
+        @test parse_count_spec("negativebinomial(5,0.5)") == NegativeBinomial(5, 0.5)
+        @test parse_count_spec("lognorm(3,0.5)") == LogNormal(3.0, 0.5)
+        @test parse_count_spec("lognormal(3,0.5)") == LogNormal(3.0, 0.5)
+        @test parse_count_spec("unif(1,10)") == DiscreteUniform(1, 10)
+        @test parse_count_spec("uniform(1,10)") == DiscreteUniform(1, 10)
+        @test parse_count_spec("exp(0.1)") == Exponential(10.0)
+        @test parse_count_spec("exponential(0.1)") == Exponential(10.0)
+        @test parse_count_spec("gamma(2,3)") == Gamma(2.0, 3.0)
         @test_throws ArgumentError parse_count_spec("garbage")
     end
 
@@ -524,13 +536,13 @@ using IbOxDummies
         @test q_idx < l_idx
     end
 
-    @testset "qdata_to_dataframe" begin
+    @testset "rows_to_dataframe" begin
         schema = build_schema(default_questionnaires())
         rows = [
             StudentDataRow("wave" => 1, "uid" => "abc", "school" => "Test", "phq9_1" => 2),
             StudentDataRow("wave" => 2, "uid" => "abc", "school" => "Test", "phq9_1" => missing),
         ]
-        df = qdata_to_dataframe(rows, schema)
+        df = rows_to_dataframe(rows, schema)
         @test df isa DataFrame
         @test nrow(df) == 2
         @test "wave" in names(df)

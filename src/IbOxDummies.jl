@@ -107,7 +107,7 @@ export
     # Simulation
     simulate,
     build_schema,
-    qdata_to_dataframe,
+    rows_to_dataframe,
 
     # Output
     to_csv,
