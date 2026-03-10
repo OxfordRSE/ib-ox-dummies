@@ -19,16 +19,13 @@ const GAD7_RISK_WEIGHTS = [
     sample_risk_category(rng, weights) -> (Symbol, Float64, Float64)
 
 Sample a risk category and return `(category, item_mean, item_sd)`.
+Uses a `Categorical` distribution over the provided population weights.
 """
 function sample_risk_category(rng::AbstractRNG, weights)
-    r = rand(rng)
-    cumulative = 0.0
-    for (cat, w, μ, σ) in weights
-        cumulative += w
-        r <= cumulative && return (cat, μ, σ)
-    end
-    last_entry = weights[end]
-    return (last_entry[1], last_entry[3], last_entry[4])
+    wts = [w for (_, w, _, _) in weights]
+    idx = rand(rng, Categorical(wts ./ sum(wts)))
+    entry = weights[idx]
+    return (entry[1], entry[3], entry[4])
 end
 
 """
@@ -67,15 +64,14 @@ const PHQ9_THRESHOLDS = [(:none, 4), (:mild, 9), (:moderate, 14), (:severe, 27)]
 const GAD7_THRESHOLDS = [(:none, 4), (:mild, 9), (:moderate, 14), (:severe, 21)]
 
 """
-    simulate_likert_item(rng, n_levels, category, item_mean, item_sd,
-                         prev_val) -> Int
+    simulate_likert_item(rng, n_levels, item_mean, item_sd, prev_val) -> Int
 
 Simulate a single Likert-scale item response (0 to n_levels-1).
 
 - 5% chance of a uniformly random response.
-- If `prev_val` is provided: 75% chance of sampling N(prev_val, category_sd),
-  otherwise 25% chance of half-normal with mean `item_mean`.
-- If no `prev_val`: half-normal with mean `item_mean` and sd `item_sd`.
+- If `prev_val` is provided: 75% chance of sampling from `Normal(prev_val, item_sd)`.
+- Otherwise: sample from `truncated(Normal(item_mean, item_sd), 0, Inf)` (half-normal
+  starting at 0 to reflect mild baseline severity).
 """
 function simulate_likert_item(
     rng::AbstractRNG,
@@ -90,11 +86,11 @@ function simulate_likert_item(
     end
 
     raw = if !isnothing(prev_val) && rand(rng) < 0.75
-        # Continue from previous answer
-        Float64(prev_val) + item_sd * randn(rng)
+        # Continue from previous answer using Normal centred on previous value
+        rand(rng, Normal(Float64(prev_val), item_sd))
     else
-        # First response or no continuation: half-normal starting at 0
-        item_mean + abs(item_sd * randn(rng))
+        # First response or no continuation: truncated normal starting at 0
+        rand(rng, truncated(Normal(item_mean, item_sd), 0.0, Inf))
     end
 
     return clamp(round(Int, raw), 0, n_levels - 1)

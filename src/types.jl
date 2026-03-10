@@ -43,26 +43,22 @@ struct Range
 end
 
 """
-    NormalDist
-
-Normal distribution specification used as a count specification.
-"""
-struct NormalDist
-    μ::Float64
-    σ::Float64
-    function NormalDist(μ::Real, σ::Real)
-        σ > 0 || throw(ArgumentError("NormalDist σ must be > 0"))
-        new(Float64(μ), Float64(σ))
-    end
-end
-
-"""
     CountSpec
 
 A count specification: either a fixed integer, an inclusive range, or a
-normal distribution to sample from.
+`UnivariateDistribution` from `Distributions.jl` to sample from
+(values are rounded to the nearest integer and clamped to ≥ 1).
+
+## Examples
+
+```julia
+5                      # fixed count
+Range(1, 5)            # uniform sample from [1, 5]
+Normal(30.0, 7.0)      # round(Normal(30, 7)) ≥ 1
+truncated(Normal(30.0, 7.0), 1, Inf)  # truncated to avoid non-positive values
+```
 """
-const CountSpec = Union{Int,Range,NormalDist}
+const CountSpec = Union{Int,Range,UnivariateDistribution}
 
 """
     Questionnaire
@@ -99,7 +95,7 @@ const NaughtyMonkeyFn = Function
 Custom output function.
 
 Signature:
-    (data::Vector{QData}, schema::Schema) -> Any
+    (data::DataFrame, schema::Schema) -> Any
 """
 const OutputFn = Function
 
@@ -126,7 +122,7 @@ Base.@kwdef struct SimulationConfig
     nSchools::Int = 10
     nYeargroupsPerSchool::CountSpec = 5
     nClassesPerSchoolYeargroup::CountSpec = Range(1, 5)
-    nStudentsPerClass::CountSpec = NormalDist(30.0, 7.0)
+    nStudentsPerClass::CountSpec = Normal(30.0, 7.0)
     questionnaires::Dict{String,Questionnaire} = Dict{String,Questionnaire}()
     demographicsUpdateFn::DemographicsUpdateFn = default_demographics_update
     naughtyMonkey::NaughtyMonkeyFn = default_naughty_monkey

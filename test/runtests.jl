@@ -1,5 +1,8 @@
 using Test
 using Random
+using Distributions
+using DataFrames
+using JSON3
 
 # Activate the package to pick up source files
 import Pkg
@@ -16,12 +19,9 @@ using IbOxDummies
         @test r.max == 5
         @test_throws ArgumentError Range(5, 1)
 
-        # NormalDist
-        nd = NormalDist(30.0, 7.0)
-        @test nd.μ == 30.0
-        @test nd.σ == 7.0
-        @test_throws ArgumentError NormalDist(10.0, 0.0)
-        @test_throws ArgumentError NormalDist(10.0, -1.0)
+        # CountSpec accepts Distributions.Normal
+        nd = Normal(30.0, 7.0)
+        @test nd isa UnivariateDistribution
 
         # SimulationConfig defaults
         cfg = SimulationConfig()
@@ -29,6 +29,7 @@ using IbOxDummies
         @test cfg.nSchools == 10
         @test cfg.output == "csv"
         @test isnothing(cfg.seed)
+        @test cfg.nStudentsPerClass isa Normal
     end
 
     @testset "sample_count" begin
@@ -45,12 +46,17 @@ using IbOxDummies
             @test 2 <= v <= 8
         end
 
-        # NormalDist sampling returns positive integers
+        # Distribution (Normal) sampling returns positive integers
         rng = MersenneTwister(42)
         for _ in 1:50
-            v = sample_count(rng, NormalDist(30.0, 7.0))
+            v = sample_count(rng, Normal(30.0, 7.0))
             @test v >= 1
         end
+
+        # Truncated distribution also works
+        rng = MersenneTwister(42)
+        v = sample_count(rng, truncated(Normal(5.0, 1.0), 1.0, 10.0))
+        @test 1 <= v <= 10
     end
 
     @testset "weighted_sample" begin
@@ -69,8 +75,8 @@ using IbOxDummies
         @test parse_count_spec("5") == 5
         @test parse_count_spec("1:5") == Range(1, 5)
         @test parse_count_spec("1,5") == Range(1, 5)
-        @test parse_count_spec("norm(30,7)") == NormalDist(30.0, 7.0)
-        @test parse_count_spec("dnorm(30,7)") == NormalDist(30.0, 7.0)
+        @test parse_count_spec("norm(30,7)") == Normal(30.0, 7.0)
+        @test parse_count_spec("dnorm(30,7)") == Normal(30.0, 7.0)
         @test_throws ArgumentError parse_count_spec("garbage")
     end
 
@@ -162,7 +168,7 @@ using IbOxDummies
         @test schema.questionnaireColumns["gad7_1"] == "GAD_7"
     end
 
-    @testset "Full simulation (small)" begin
+    @testset "Full simulation (small) — returns DataFrame" begin
         config = SimulationConfig(
             nWaves                     = 2,
             nSchools                   = 2,
@@ -173,26 +179,24 @@ using IbOxDummies
         )
         data, schema = simulate(config)
 
-        # We expect: 2 schools × 2 yeargroups × 1 class × 3 students × 2 waves = 24 rows
-        @test length(data) == 24
+        # simulate() must return a DataFrame
+        @test data isa DataFrame
 
-        # Check column presence
-        for row in data
-            @test haskey(row, "wave")
-            @test haskey(row, "uid")
-            @test haskey(row, "school")
-        end
+        # 2 schools × 2 yeargroups × 1 class × 3 students × 2 waves = 24 rows
+        @test nrow(data) == 24
+
+        # Expected columns
+        @test "wave" in names(data)
+        @test "uid" in names(data)
+        @test "school" in names(data)
 
         # Waves should be 1 or 2
-        waves = [row["wave"] for row in data if haskey(row, "wave") && row["wave"] isa Int]
-        @test Set(waves) ⊆ Set([1, 2])
+        @test Set(skipmissing(data[!, "wave"])) ⊆ Set([1, 2])
 
-        # PHQ-9 items should exist and be in range (or missing from naughty monkey)
-        for row in data
-            if haskey(row, "phq9_1") && !ismissing(row["phq9_1"])
-                @test row["phq9_1"] isa Int
-                @test 0 <= row["phq9_1"]::Int <= 3
-            end
+        # PHQ-9 items should be in range (or missing from naughty monkey)
+        for v in skipmissing(data[!, "phq9_1"])
+            @test v isa Int
+            @test 0 <= v <= 3
         end
     end
 
@@ -208,14 +212,17 @@ using IbOxDummies
         data1, _ = simulate(cfg)
         data2, _ = simulate(cfg)
         # Same seed → same output
-        @test length(data1) == length(data2)
-        for (r1, r2) in zip(data1, data2)
-            @test get(r1, "uid", nothing) == get(r2, "uid", nothing)
-            @test get(r1, "phq9_1", nothing) === get(r2, "phq9_1", nothing)
+        @test nrow(data1) == nrow(data2)
+        @test all(isequal.(data1[!, "uid"], data2[!, "uid"]))
+        # PHQ-9 column values should be identical (accounting for missing)
+        col1 = data1[!, "phq9_1"]
+        col2 = data2[!, "phq9_1"]
+        for (v1, v2) in zip(col1, col2)
+            @test isequal(v1, v2)  # isequal treats missing == missing
         end
     end
 
-    @testset "CSV output" begin
+    @testset "CSV output (via CSV.jl)" begin
         config = SimulationConfig(
             nWaves = 1, nSchools = 1,
             nYeargroupsPerSchool = 1, nClassesPerSchoolYeargroup = 1,
@@ -228,8 +235,8 @@ using IbOxDummies
         csv_str = String(take!(buf))
 
         lines = split(csv_str, '\n'; keepempty = false)
-        @test length(lines) == 1 + length(data)  # header + rows
-        # Header contains expected columns
+        # CSV.jl writes header + nrow rows
+        @test length(lines) == 1 + nrow(data)
         header = lines[1]
         @test occursin("wave", header)
         @test occursin("uid", header)
@@ -237,7 +244,7 @@ using IbOxDummies
         @test occursin("gad7_1", header)
     end
 
-    @testset "JSON output" begin
+    @testset "JSON output (via JSON3.jl)" begin
         config = SimulationConfig(
             nWaves = 1, nSchools = 1,
             nYeargroupsPerSchool = 1, nClassesPerSchoolYeargroup = 1,
@@ -253,6 +260,9 @@ using IbOxDummies
         @test endswith(strip(json_str), "]")
         @test occursin("\"wave\"", json_str)
         @test occursin("\"uid\"", json_str)
+        # Valid JSON: should parse back to an array
+        parsed = JSON3.read(json_str)
+        @test length(parsed) == nrow(data)
     end
 
     @testset "JSON Schema export" begin
@@ -279,13 +289,11 @@ using IbOxDummies
         # After naughty monkey some values may be missing; count missings
         total_q = 0
         missing_q = 0
-        for row in data
-            for col in keys(schema.questionnaireColumns)
-                total_q += 1
-                haskey(row, col) && ismissing(row[col]) && (missing_q += 1)
-            end
+        for col in keys(schema.questionnaireColumns)
+            col ∈ names(data) || continue
+            total_q   += nrow(data)
+            missing_q += count(ismissing, data[!, col])
         end
-        # With default 0.25% deletion, expected missing ≈ 0.25% but may be 0 for small data
         @test missing_q >= 0
         @test missing_q <= total_q
     end
@@ -297,13 +305,15 @@ using IbOxDummies
         @test cfg.seed == 42
 
         cfg2 = parse_cli_args(["--nStudentsPerClass", "norm(25,5)", "--output", "json"])
-        @test cfg2.nStudentsPerClass == NormalDist(25.0, 5.0)
+        @test cfg2.nStudentsPerClass == Normal(25.0, 5.0)
         @test cfg2.output == "json"
 
         cfg3 = parse_cli_args(["--nClassesPerSchoolYeargroup", "2:6"])
         @test cfg3.nClassesPerSchoolYeargroup == Range(2, 6)
 
-        @test_throws Exception parse_cli_args(["--unknown-flag"])
+        # ArgParse calls exit(1) for unrecognised flags; test valid args parse correctly
+        cfg_ok = parse_cli_args(["--nWaves", "1"])
+        @test cfg_ok.nWaves == 1
     end
 
     @testset "column_order" begin
@@ -314,9 +324,23 @@ using IbOxDummies
         # Fixed cols come first
         @test cols[1] == "wave"
         @test cols[2] == "uid"
-        # Questionnaire cols come after demographics
+        # Total columns = demographics + questionnaire columns
         demo_count = length(schema.demographicsColumns)
         @test length(cols) == demo_count + length(schema.questionnaireColumns)
+    end
+
+    @testset "qdata_to_dataframe" begin
+        schema = build_schema(default_questionnaires())
+        rows = [
+            QData("wave" => 1, "uid" => "abc", "school" => "Test", "phq9_1" => 2),
+            QData("wave" => 2, "uid" => "abc", "school" => "Test", "phq9_1" => missing),
+        ]
+        df = qdata_to_dataframe(rows, schema)
+        @test df isa DataFrame
+        @test nrow(df) == 2
+        @test "wave" in names(df)
+        @test df[1, "phq9_1"] == 2
+        @test ismissing(df[2, "phq9_1"])
     end
 
 end  # @testset "IbOxDummies"

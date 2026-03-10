@@ -3,7 +3,13 @@
 A simulator for generating realistic mock longitudinal questionnaire data,
 designed to represent annual survey responses from schoolchildren.
 
-Built in [Julia](https://julialang.org/) using only the standard library.
+Built in [Julia](https://julialang.org/) using:
+- **[ArgParse.jl](https://github.com/carlobaldassi/ArgParse.jl)** — CLI argument parsing
+- **[Distributions.jl](https://github.com/JuliaStats/Distributions.jl)** — statistical distributions for realistic count and item sampling
+- **[StatsBase.jl](https://github.com/JuliaStats/StatsBase.jl)** — weighted categorical sampling for demographics
+- **[DataFrames.jl](https://github.com/JuliaData/DataFrames.jl)** — tabular output representation
+- **[CSV.jl](https://github.com/JuliaData/CSV.jl)** — CSV serialisation
+- **[JSON3.jl](https://github.com/quinnj/JSON3.jl)** — JSON serialisation
 
 ## Requirements
 
@@ -35,26 +41,31 @@ ib_ox_dummies --help
 ## Usage
 
 ```
-ib_ox_dummies — Generate mock longitudinal questionnaire data.
+usage: ib_ox_dummies [--nWaves NWAVES] [--nSchools NSCHOOLS]
+                     [--nYeargroupsPerSchool NYEARGROUPSPERSCHOOL]
+                     [--nClassesPerSchoolYeargroup NCLASSESPERSCHOOLYEARGROUP]
+                     [--nStudentsPerClass NSTUDENTSPERCLASS]
+                     [--seed SEED] [--output OUTPUT] [--schema]
+                     [--version] [-h]
 
-USAGE
-  ib_ox_dummies [OPTIONS]
+Generate mock longitudinal questionnaire data for schoolchildren.
+SPEC formats: integer (e.g. '5'), inclusive range (e.g. '1:5'), or
+normal distribution (e.g. 'norm(30,7)').
 
-OPTIONS
-  --nWaves INT                     Number of data-collection waves (default: 3)
-  --nSchools INT                   Number of schools (default: 10)
-  --nYeargroupsPerSchool SPEC      Yeargroups per school (default: 5)
-  --nClassesPerSchoolYeargroup SPEC Classes per school yeargroup (default: 1,5)
-  --nStudentsPerClass SPEC         Students per class (default: norm(30,7))
-  --seed INT                       Random seed for reproducibility
-  --output FORMAT                  Output format: csv | json | schema (default: csv)
-  --schema                         Print JSON Schema and exit
-  --help, -h                       Show this help and exit
-
-SPEC formats:
-  5             Fixed integer
-  1:5           Inclusive range [min, max] (uniform sample)
-  norm(30,7)    Normal distribution N(μ=30, σ=7) (rounded to nearest integer ≥ 1)
+optional arguments:
+  --nWaves NWAVES       Number of data-collection waves (type: Int64, default: 3)
+  --nSchools NSCHOOLS   Number of schools (type: Int64, default: 10)
+  --nYeargroupsPerSchool NYEARGROUPSPERSCHOOL
+                        Yeargroups per school (SPEC) (default: "5")
+  --nClassesPerSchoolYeargroup NCLASSESPERSCHOOLYEARGROUP
+                        Classes per school yeargroup (SPEC) (default: "1:5")
+  --nStudentsPerClass NSTUDENTSPERCLASS
+                        Students per class (SPEC) (default: "norm(30,7)")
+  --seed SEED           Random seed for reproducibility (type: Int64)
+  --output OUTPUT       Output format: csv | json | schema (default: "csv")
+  --schema              Print JSON Schema describing the output columns and exit
+  --version             show version information and exit
+  -h, --help            show this help message and exit
 ```
 
 ### Examples
@@ -99,14 +110,15 @@ The package can also be used programmatically from Julia:
 
 ```julia
 using IbOxDummies
+using Distributions  # for Normal, truncated, etc.
 
-# Run with all defaults
+# Run with all defaults — returns a DataFrame
 data, schema = simulate(SimulationConfig(seed = 42))
 
-# Write CSV to stdout
+# Write CSV to stdout (uses CSV.jl)
 to_csv(data, schema)
 
-# Write JSON to stdout
+# Write JSON to stdout (uses JSON3.jl)
 to_json(data, schema)
 
 # Get JSON Schema string
@@ -122,7 +134,7 @@ config = SimulationConfig(
     nSchools                   = 5,
     nYeargroupsPerSchool       = Range(3, 6),
     nClassesPerSchoolYeargroup = Range(1, 4),
-    nStudentsPerClass          = NormalDist(28.0, 5.0),
+    nStudentsPerClass          = Normal(28.0, 5.0),    # Distributions.Normal
     questionnaires             = my_qs,
     seed                       = 123,
     output                     = "csv",
@@ -135,10 +147,10 @@ data, schema = simulate(config)
 | Type | Description |
 |------|-------------|
 | `AData` | `Union{Int, Float64, String, Missing}` — a single answer |
-| `QData` | `Dict{String, AData}` — one student-wave row |
+| `QData` | `Dict{String, AData}` — internal per-student-wave record |
 | `Schema` | Column metadata (demographics vs questionnaire columns) |
 | `Range` | Inclusive integer range `[min, max]` |
-| `NormalDist` | Normal distribution `N(μ, σ)` |
+| `CountSpec` | `Union{Int, Range, UnivariateDistribution}` — count specification |
 | `SimulationConfig` | All simulation parameters |
 | `Questionnaire` | `(rng, studentData, schema) -> QData` |
 

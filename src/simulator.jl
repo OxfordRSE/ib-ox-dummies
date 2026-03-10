@@ -25,11 +25,25 @@ function build_schema(questionnaires::Dict{String,Questionnaire})::Schema
 end
 
 """
-    simulate(config::SimulationConfig) -> (Vector{QData}, Schema)
+    qdata_to_dataframe(rows, schema) -> DataFrame
 
-Run the full simulation and return the long-format output rows and schema.
+Convert a `Vector{QData}` to a `DataFrame` with columns in canonical order.
+Missing values (absent keys) are represented as `missing`.
 """
-function simulate(config::SimulationConfig)::Tuple{Vector{QData},Schema}
+function qdata_to_dataframe(rows::Vector{QData}, schema::Schema)::DataFrame
+    cols = column_order(schema)
+    return DataFrame(
+        [col => [get(row, col, missing) for row in rows] for col in cols]
+    )
+end
+
+"""
+    simulate(config::SimulationConfig) -> (DataFrame, Schema)
+
+Run the full simulation and return the long-format output as a `DataFrame`
+and the associated `Schema`.
+"""
+function simulate(config::SimulationConfig)::Tuple{DataFrame,Schema}
     qs = isempty(config.questionnaires) ? default_questionnaires() :
         config.questionnaires
 
@@ -42,32 +56,20 @@ function simulate(config::SimulationConfig)::Tuple{Vector{QData},Schema}
 
     schema = build_schema(qs)
 
-    # Column ordering for output consistency
-    demo_cols  = schema.demographicsColumns
-    q_col_order = sort(collect(keys(schema.questionnaireColumns)))
-
     # --- Build school/yeargroup/class/student structure ---
-    # school_id => school_name
     schools = Dict{Int,String}()
     for s in 1:config.nSchools
         schools[s] = generate_school_name(rng, s)
     end
 
-    # Build list of (school_id, yeargroup, school_year, class_label) tuples
-    # and for each, a list of student UIDs with their initial demographics.
-    # Structure: student_key => [wave_data...]
-    #   student_key = (school_id, yeargroup, class_idx, student_idx)
-    #   wave_data[w] = QData for that wave (grows as waves are simulated)
-
     # First pass: create all students
-    # students: list of (school_id, yeargroup, school_year, class_label, uid, demographics)
-    struct_students = []  # NamedTuple list
+    struct_students = []
 
     for s_id in 1:config.nSchools
         n_yg = sample_count(rng, config.nYeargroupsPerSchool)
         school_name = schools[s_id]
         for yg in 1:n_yg
-            school_year = yg  # yeargroup index used directly as school year
+            school_year = yg
             n_cls = sample_count(rng, config.nClassesPerSchoolYeargroup)
             for cls in 1:n_cls
                 class_label = generate_class_label(rng, yg, cls)
@@ -78,11 +80,11 @@ function simulate(config::SimulationConfig)::Tuple{Vector{QData},Schema}
                         rng, school_name, yg, school_year, class_label, uid
                     )
                     push!(struct_students, (
-                        school_id   = s_id,
-                        yeargroup   = yg,
-                        school_year = school_year,
-                        class_label = class_label,
-                        uid         = uid,
+                        school_id    = s_id,
+                        yeargroup    = yg,
+                        school_year  = school_year,
+                        class_label  = class_label,
+                        uid          = uid,
                         demographics = demo,
                     ))
                 end
@@ -90,33 +92,31 @@ function simulate(config::SimulationConfig)::Tuple{Vector{QData},Schema}
         end
     end
 
-    # all_output: will collect every row across all waves
+    # all_output collects every row across all waves
     all_output = QData[]
 
-    # Per-student history: uid => Vector{QData} (cumulative across waves)
-    student_history = Dict{String,Vector{QData}}()
-    # Per-student current demographics: uid => QData
+    # Per-student history and current demographics
+    student_history      = Dict{String,Vector{QData}}()
     student_demographics = Dict{String,QData}()
 
     for stu in struct_students
-        student_history[stu.uid] = QData[]
+        student_history[stu.uid]      = QData[]
         student_demographics[stu.uid] = stu.demographics
     end
 
     # --- Run waves ---
     for wave in 1:config.nWaves
         for stu in struct_students
-            uid = stu.uid
+            uid     = stu.uid
             history = student_history[uid]
 
             # Update demographics after the first wave
             current_demo = if wave == 1
                 student_demographics[uid]
             else
-                updated = config.demographicsUpdateFn(rng, history)
-                # Merge: keep existing keys not returned by the update fn
+                updated   = config.demographicsUpdateFn(rng, history)
                 prev_demo = student_demographics[uid]
-                merged = copy(prev_demo)
+                merged    = copy(prev_demo)
                 for (k, v) in updated
                     merged[k] = v
                 end
@@ -124,15 +124,14 @@ function simulate(config::SimulationConfig)::Tuple{Vector{QData},Schema}
                 merged
             end
 
-            # Build the row: start with wave + demographics
+            # Build the row: wave + demographics + questionnaire responses
             row = QData()
             row["wave"] = wave
             for (k, v) in current_demo
                 row[k] = v
             end
 
-            # Run each questionnaire
-            for (q_name, q_fn) in qs
+            for (_, q_fn) in qs
                 q_result = q_fn(rng, history, schema)
                 for (k, v) in q_result
                     row[k] = v
@@ -147,5 +146,5 @@ function simulate(config::SimulationConfig)::Tuple{Vector{QData},Schema}
     # Apply naughty monkey
     all_output = config.naughtyMonkey(rng, all_output, schema)
 
-    return all_output, schema
+    return qdata_to_dataframe(all_output, schema), schema
 end

@@ -19,96 +19,37 @@ function column_order(schema::Schema)::Vector{String}
 end
 
 """
-    adata_to_string(v::AData) -> String
+    to_csv(df, schema; io=stdout)
 
-Convert a single answer datum to its string representation.
-`missing` becomes the empty string (for CSV) or `null` (for JSON).
+Write the output `DataFrame` as CSV to `io` using `CSV.jl`.
+Columns are written in canonical order defined by `column_order(schema)`.
 """
-function adata_to_csv_string(v::AData)::String
-    ismissing(v) && return ""
-    v isa String && return v  # no quoting for internal use; handled by write_csv
-    return string(v)
+function to_csv(df::DataFrame, schema::Schema; io::IO = stdout)
+    cols = [c for c in column_order(schema) if c ∈ names(df)]
+    CSV.write(io, df[:, cols])
 end
 
 """
-    escape_csv_field(s) -> String
+    to_json(df, schema; io=stdout)
 
-Wrap a CSV field in quotes if it contains commas, quotes, or newlines.
+Write the output `DataFrame` as a JSON array of objects to `io` using `JSON3.jl`.
+Missing values are serialised as `null`. Columns appear in canonical order.
 """
-function escape_csv_field(s::String)::String
-    if occursin(',', s) || occursin('"', s) || occursin('\n', s)
-        return '"' * replace(s, '"' => "\"\"") * '"'
-    end
-    return s
-end
-
-"""
-    to_csv(data, schema; io=stdout)
-
-Write the output data as CSV to `io`.
-"""
-function to_csv(data::Vector{QData}, schema::Schema; io::IO = stdout)
-    cols = column_order(schema)
-
-    # Header
-    println(io, join(cols, ","))
-
-    # Rows
-    for row in data
-        fields = [
-            escape_csv_field(adata_to_csv_string(get(row, c, missing)))
-            for c in cols
-        ]
-        println(io, join(fields, ","))
-    end
-end
-
-"""
-    adata_to_json(v::AData) -> String
-
-Serialise a single `AData` value to its JSON representation.
-"""
-function adata_to_json(v::AData)::String
-    ismissing(v) && return "null"
-    v isa String && return '"' * replace(v, '\\' => "\\\\", '"' => "\\\"") * '"'
-    v isa Int    && return string(v)
-    v isa Float64 && isnan(v) && return "null"
-    v isa Float64 && isinf(v) && return "null"
-    return string(v)
-end
-
-"""
-    to_json(data, schema; io=stdout)
-
-Write the output data as a JSON array of objects to `io`.
-"""
-function to_json(data::Vector{QData}, schema::Schema; io::IO = stdout)
-    cols = column_order(schema)
-    println(io, "[")
-    for (i, row) in enumerate(data)
-        print(io, "  {")
-        pairs_strs = [
-            '"' * c * '"' * ": " * adata_to_json(get(row, c, missing))
-            for c in cols
-        ]
-        print(io, join(pairs_strs, ", "))
-        print(io, "}")
-        i < length(data) && print(io, ",")
-        println(io)
-    end
-    println(io, "]")
+function to_json(df::DataFrame, schema::Schema; io::IO = stdout)
+    cols = [c for c in column_order(schema) if c ∈ names(df)]
+    JSON3.write(io, Tables.rowtable(df[:, cols]))
+    println(io)
 end
 
 """
     to_json_schema(schema) -> String
 
 Export the schema as a JSON Schema (Draft 7) document describing the output
-row type.
+row type. Suitable for downstream validation or code generation.
 """
 function to_json_schema(schema::Schema)::String
     cols = column_order(schema)
 
-    # Build property definitions
     io = IOBuffer()
     println(io, """{
   "\$schema": "http://json-schema.org/draft-07/schema#",
@@ -116,11 +57,6 @@ function to_json_schema(schema::Schema)::String
   "description": "One row of simulated student questionnaire data.",
   "type": "object",
   "properties": {""")
-
-    int_cols = Set([
-        "wave", "yearGroup", "schoolYear", "d_age",
-        # PHQ-9 and GAD-7 items are integers
-    ])
 
     function col_schema(c)
         qname = get(schema.questionnaireColumns, c, nothing)
@@ -158,27 +94,27 @@ function to_json_schema(schema::Schema)::String
 end
 
 """
-    write_output(data, schema, config)
+    write_output(df, schema, config)
 
 Produce the final output according to `config.output`.
-- `"csv"` → write CSV to stdout.
-- `"json"` → write JSON to stdout.
+- `"csv"` → write CSV to stdout (via `CSV.jl`).
+- `"json"` → write JSON to stdout (via `JSON3.jl`).
 - `"schema"` → write JSON Schema to stdout.
-- A `Function` → call `config.output(data, schema)` and pretty-print the result.
+- A `Function` → call `config.output(df, schema)` and print the result.
 """
-function write_output(data::Vector{QData}, schema::Schema, config::SimulationConfig)
+function write_output(df::DataFrame, schema::Schema, config::SimulationConfig)
     if config.output isa String
         if config.output == "csv"
-            to_csv(data, schema)
+            to_csv(df, schema)
         elseif config.output == "json"
-            to_json(data, schema)
+            to_json(df, schema)
         elseif config.output == "schema"
             println(to_json_schema(schema))
         else
             error("Unknown output format: $(config.output). Use 'csv', 'json', or 'schema'.")
         end
     else
-        result = config.output(data, schema)
+        result = config.output(df, schema)
         println(result)
     end
 end

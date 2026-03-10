@@ -78,25 +78,20 @@ const SEX_WEIGHTS = [
 """
     weighted_sample(rng, options)
 
-Sample one item from a weighted list of `(value, weight)` pairs.
+Sample one item from a weighted list of `(value, weight)` pairs using
+`StatsBase.sample` with `Weights`.
 """
 function weighted_sample(rng::AbstractRNG, options::Vector{Tuple{String,Float64}})
-    r = rand(rng)
-    cumulative = 0.0
-    for (val, w) in options
-        cumulative += w
-        r <= cumulative && return val
-    end
-    return first(options[end])
+    return sample(rng, first.(options), Weights(last.(options)))
 end
 
 """
     sample_count(rng, spec) -> Int
 
-Sample a non-negative integer count from a `CountSpec`.
-- `Int`: return the integer directly.
+Sample a positive integer count from a `CountSpec`.
+- `Int`: return the value directly (must be ≥ 1).
 - `Range`: sample uniformly from [min, max].
-- `NormalDist`: sample from N(μ, σ) and round/clamp to ≥ 1.
+- `UnivariateDistribution`: draw a sample, round to nearest integer, clamp to ≥ 1.
 """
 function sample_count(rng::AbstractRNG, spec::CountSpec)::Int
     if spec isa Int
@@ -104,9 +99,8 @@ function sample_count(rng::AbstractRNG, spec::CountSpec)::Int
         return spec
     elseif spec isa Range
         return rand(rng, spec.min:spec.max)
-    else  # NormalDist
-        v = spec.μ + spec.σ * randn(rng)
-        return max(1, round(Int, v))
+    else  # UnivariateDistribution
+        return max(1, round(Int, rand(rng, spec)))
     end
 end
 

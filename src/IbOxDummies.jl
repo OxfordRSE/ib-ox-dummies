@@ -12,10 +12,10 @@ using IbOxDummies
 # Run with defaults (3 waves, 10 schools, PHQ-9 + GAD-7)
 data, schema = simulate(SimulationConfig(seed = 42))
 
-# Write as CSV
+# Write as CSV (uses CSV.jl)
 to_csv(data, schema)
 
-# Write as JSON
+# Write as JSON (uses JSON3.jl)
 to_json(data, schema)
 
 # Export JSON Schema describing the output
@@ -24,13 +24,20 @@ println(to_json_schema(schema))
 
 ## CLI
 
-The package installs an `ib_ox_dummies` executable.  Run it with:
+The package provides an `ib_ox_dummies` executable.  Run it with:
 
     ib_ox_dummies --help
 """
 module IbOxDummies
 
 using Random
+using Distributions
+using StatsBase: sample, Weights
+using DataFrames
+using Tables
+using CSV
+using JSON3
+using ArgParse
 
 include("types.jl")
 include("demographics.jl")
@@ -45,7 +52,6 @@ export
     QData,
     Schema,
     Range,
-    NormalDist,
     CountSpec,
     Questionnaire,
     NaughtyMonkeyFn,
@@ -68,6 +74,7 @@ export
     # Simulation
     simulate,
     build_schema,
+    qdata_to_dataframe,
 
     # Output
     to_csv,
@@ -79,7 +86,6 @@ export
     # CLI
     ib_ox_dummies_cli,
     parse_cli_args,
-    parse_count_spec,
-    print_usage
+    parse_count_spec
 
 end
