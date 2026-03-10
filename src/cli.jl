@@ -91,7 +91,6 @@ function parse_cli_args(args::Vector{String})::SimulationConfig
         nYeargroupsPerSchool       = parse_count_spec(parsed["nYeargroupsPerSchool"]),
         nClassesPerSchoolYeargroup = parse_count_spec(parsed["nClassesPerSchoolYeargroup"]),
         nStudentsPerClass          = parse_count_spec(parsed["nStudentsPerClass"]),
-        questionnaires             = Dict{String,Questionnaire}(),
         demographicsUpdateFn       = default_demographics_update,
         naughtyMonkey              = default_naughty_monkey,
         output                     = output,

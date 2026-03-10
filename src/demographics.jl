@@ -163,9 +163,35 @@ function generate_class_label(rng::AbstractRNG, yeargroup::Int, class_idx::Int):
 end
 
 """
-    generate_demographics(rng, school_name, yeargroup, school_year, class_label, uid) -> QData
+    perturb_weights(rng, weights, sd) -> Vector{Tuple{String,Float64}}
+
+Return a perturbed copy of a categorical weight vector.
+
+Each weight `w` is sampled from `Normal(w, sd * max(w, 0.01))`, clamped to ≥ 0,
+and the result is renormalised to sum to 1. When `sd == 0` the original weights
+are returned unchanged. Falls back to the original weights on degenerate inputs.
+
+Used to give each school a slightly different demographic composition.
+"""
+function perturb_weights(
+    rng::AbstractRNG,
+    weights::Vector{Tuple{String,Float64}},
+    sd::Float64,
+)::Vector{Tuple{String,Float64}}
+    sd == 0.0 && return weights
+    raw = [max(0.0, rand(rng, Normal(w, sd * max(w, 0.01)))) for (_, w) in weights]
+    total = sum(raw)
+    total <= 0.0 && return weights  # fallback on degenerate case
+    return [(cat, raw[i] / total) for (i, (cat, _)) in enumerate(weights)]
+end
+
+"""
+    generate_demographics(rng, school_name, yeargroup, school_year, class_label, uid; ...) -> QData
 
 Generate initial demographics for one student.
+
+Keyword arguments allow passing school-specific perturbed weight distributions
+(from `perturb_weights`) to introduce realistic inter-school variation.
 """
 function generate_demographics(
     rng::AbstractRNG,
@@ -173,15 +199,18 @@ function generate_demographics(
     yeargroup::Int,
     school_year::Int,
     class_label::String,
-    uid::String,
+    uid::String;
+    ethnicity_weights::Vector{Tuple{String,Float64}}   = ETHNICITY_WEIGHTS,
+    sex_weights::Vector{Tuple{String,Float64}}          = SEX_WEIGHTS,
+    gender_weights::Vector{Tuple{String,Float64}}       = GENDER_IDENTITY_WEIGHTS,
+    orientation_weights::Vector{Tuple{String,Float64}}  = SEXUAL_ORIENTATION_WEIGHTS,
 )::QData
-    sex = weighted_sample(rng, SEX_WEIGHTS)
+    sex = weighted_sample(rng, sex_weights)
     name = generate_name(rng, sex)
-    age = 9 + school_year  # approximate age from school year (Year 1 ≈ age 5-6, but
-                            # questionnaire context uses school year directly)
-    ethnicity = weighted_sample(rng, ETHNICITY_WEIGHTS)
-    sexual_orientation = weighted_sample(rng, SEXUAL_ORIENTATION_WEIGHTS)
-    gender_identity = weighted_sample(rng, GENDER_IDENTITY_WEIGHTS)
+    age = 9 + school_year  # approximate age from school year
+    ethnicity = weighted_sample(rng, ethnicity_weights)
+    sexual_orientation = weighted_sample(rng, orientation_weights)
+    gender_identity = weighted_sample(rng, gender_weights)
 
     return QData(
         "uid"          => uid,

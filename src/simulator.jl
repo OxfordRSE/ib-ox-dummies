@@ -1,27 +1,28 @@
 """
-    build_schema(questionnaires) -> Schema
+    build_schema(questionnaires; latent_variables, include_latents) -> Schema
 
-Build a `Schema` from the given questionnaire mapping.
-Demographics columns are the fixed set of structural fields.
+Build a `Schema` from the given questionnaire specifications.
 """
-function build_schema(questionnaires::Dict{String,Questionnaire})::Schema
+function build_schema(
+    questionnaires::Vector{QuestionnaireSpec},
+    latent_variables::Vector{String} = String[],
+    include_latents::Bool = false,
+)::Schema
     demo_cols = [
         "wave", "uid", "name", "school", "yearGroup", "schoolYear", "class",
         "d_age", "d_sex", "d_ethnicity", "d_sexualOrientation", "d_genderIdentity",
     ]
 
     q_cols = Dict{String,String}()
-    # Discover columns by running each questionnaire once with empty data
-    for (q_name, q_fn) in questionnaires
-        rng = MersenneTwister(0)
-        dummy_schema = Schema(String[], Dict{String,String}())
-        sample_result = q_fn(rng, QData[], dummy_schema)
-        for col in keys(sample_result)
-            q_cols[col] = q_name
+    for spec in questionnaires
+        for i in 1:spec.nItems
+            q_cols["$(spec.prefix)_$i"] = spec.name
         end
     end
 
-    return Schema(demo_cols, q_cols)
+    latent_cols = include_latents ? sort(["l_$n" for n in latent_variables]) : String[]
+
+    return Schema(demo_cols, q_cols, latent_cols)
 end
 
 """
@@ -42,34 +43,41 @@ end
 
 Run the full simulation and return the long-format output as a `DataFrame`
 and the associated `Schema`.
+
+The simulation proceeds in five stages:
+1. Generate school → yeargroup → class → student hierarchy with per-school
+   perturbed demographic weight distributions.
+2. Build all (student × wave) row templates and pre-compute random effect draws.
+3. For each wave, compute latent variable values per student and generate
+   questionnaire responses from those latents.
+4. Optionally attach latent variable values as `l_*` columns.
+5. Apply the naughty-monkey corruption function.
 """
 function simulate(config::SimulationConfig)::Tuple{DataFrame,Schema}
-    qs = isempty(config.questionnaires) ? default_questionnaires() :
-        config.questionnaires
+    qs    = isempty(config.questionnaires)   ? default_questionnaire_specs() : config.questionnaires
+    lvars = isempty(config.latentVariables)  ? default_latent_variables()    : config.latentVariables
+    coefs = isempty(config.coefficients)     ? default_coefficients()        : config.coefficients
+    effs  = isempty(config.effects)          ? default_effects()             : config.effects
 
-    # Seed the RNG
-    rng = if isnothing(config.seed)
-        MersenneTwister()
-    else
-        MersenneTwister(config.seed)
-    end
+    rng = isnothing(config.seed) ? MersenneTwister() : MersenneTwister(config.seed)
 
-    schema = build_schema(qs)
+    schema = build_schema(qs, lvars, config.includeLatents)
 
-    # --- Build school/yeargroup/class/student structure ---
-    schools = Dict{Int,String}()
-    for s in 1:config.nSchools
-        schools[s] = generate_school_name(rng, s)
-    end
-
-    # First pass: create all students
+    # --- Stage 1: Generate school/yeargroup/class/student structure ---
     struct_students = []
 
     for s_id in 1:config.nSchools
+        school_name = generate_school_name(rng, s_id)
         n_yg = sample_count(rng, config.nYeargroupsPerSchool)
-        school_name = schools[s_id]
+
+        # Per-school perturbed demographic weight distributions
+        sd = config.demographicPerturbationSD
+        eth_wts  = perturb_weights(rng, ETHNICITY_WEIGHTS,           sd)
+        sex_wts  = perturb_weights(rng, SEX_WEIGHTS,                 sd)
+        gend_wts = perturb_weights(rng, GENDER_IDENTITY_WEIGHTS,     sd)
+        ori_wts  = perturb_weights(rng, SEXUAL_ORIENTATION_WEIGHTS,  sd)
+
         for yg in 1:n_yg
-            school_year = yg
             n_cls = sample_count(rng, config.nClassesPerSchoolYeargroup)
             for cls in 1:n_cls
                 class_label = generate_class_label(rng, yg, cls)
@@ -77,34 +85,40 @@ function simulate(config::SimulationConfig)::Tuple{DataFrame,Schema}
                 for _ in 1:n_stu
                     uid = generate_uid(rng)
                     demo = generate_demographics(
-                        rng, school_name, yg, school_year, class_label, uid
+                        rng, school_name, yg, yg, class_label, uid;
+                        ethnicity_weights   = eth_wts,
+                        sex_weights         = sex_wts,
+                        gender_weights      = gend_wts,
+                        orientation_weights = ori_wts,
                     )
-                    push!(struct_students, (
-                        school_id    = s_id,
-                        yeargroup    = yg,
-                        school_year  = school_year,
-                        class_label  = class_label,
-                        uid          = uid,
-                        demographics = demo,
-                    ))
+                    add_numeric_encodings!(demo)
+                    push!(struct_students, (uid = uid, demographics = demo))
                 end
             end
         end
     end
 
-    # all_output collects every row across all waves
-    all_output = QData[]
+    # --- Stage 2: Build all (student × wave) templates and pre-compute effects ---
+    all_templates = QData[]
+    for wave in 1:config.nWaves, stu in struct_students
+        tmpl = copy(stu.demographics)
+        tmpl["wave"] = wave
+        push!(all_templates, tmpl)
+    end
 
-    # Per-student history and current demographics
+    effect_draws = precompute_effect_draws(rng, effs, all_templates)
+
+    # --- Initialise per-student state ---
     student_history      = Dict{String,Vector{QData}}()
     student_demographics = Dict{String,QData}()
-
     for stu in struct_students
         student_history[stu.uid]      = QData[]
         student_demographics[stu.uid] = stu.demographics
     end
 
-    # --- Run waves ---
+    all_output = QData[]
+
+    # --- Stage 3: Run waves ---
     for wave in 1:config.nWaves
         for stu in struct_students
             uid     = stu.uid
@@ -120,21 +134,31 @@ function simulate(config::SimulationConfig)::Tuple{DataFrame,Schema}
                 for (k, v) in updated
                     merged[k] = v
                 end
+                add_numeric_encodings!(merged)
                 student_demographics[uid] = merged
                 merged
             end
 
-            # Build the row: wave + demographics + questionnaire responses
-            row = QData()
+            # Build row: demographics + wave
+            row = copy(current_demo)
             row["wave"] = wave
-            for (k, v) in current_demo
-                row[k] = v
-            end
 
-            for (_, q_fn) in qs
-                q_result = q_fn(rng, history, schema)
+            # Compute latent variables for this row
+            latents = compute_row_latents(rng, row, lvars, coefs, effs, effect_draws)
+
+            # Generate questionnaire responses driven by latent values
+            prev_resp = isempty(history) ? nothing : history[end]
+            for spec in qs
+                q_result = generate_questionnaire_responses(rng, spec, latents, prev_resp)
                 for (k, v) in q_result
                     row[k] = v
+                end
+            end
+
+            # Stage 4: Optionally attach latent variable values as l_* columns
+            if config.includeLatents
+                for (name, val) in latents
+                    row["l_$name"] = val
                 end
             end
 
@@ -143,7 +167,7 @@ function simulate(config::SimulationConfig)::Tuple{DataFrame,Schema}
         end
     end
 
-    # Apply naughty monkey
+    # --- Stage 5: Apply naughty monkey ---
     all_output = config.naughtyMonkey(rng, all_output, schema)
 
     return qdata_to_dataframe(all_output, schema), schema

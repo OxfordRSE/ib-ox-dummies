@@ -3,7 +3,8 @@
 
 Return the canonical column ordering for the output dataset:
   wave, uid, name, school, yearGroup, schoolYear, class,
-  demographics columns, then questionnaire columns (sorted by questionnaire name, then column).
+  demographics columns, questionnaire columns (sorted by questionnaire name, then column),
+  then latent variable columns (sorted alphabetically).
 """
 function column_order(schema::Schema)::Vector{String}
     fixed = ["wave", "uid", "name", "school", "yearGroup", "schoolYear", "class"]
@@ -15,7 +16,7 @@ function column_order(schema::Schema)::Vector{String}
         collect(keys(schema.questionnaireColumns));
         by = c -> (schema.questionnaireColumns[c], c),
     )
-    return vcat(fixed, demo, q_cols)
+    return vcat(fixed, demo, q_cols, schema.latentColumns)
 end
 
 """
@@ -79,6 +80,9 @@ function to_json_schema(schema::Schema)::String
         elseif is_q
             return """    "$c": {"type": ["integer", "null"], "minimum": 0, "maximum": 3, """ *
                    """"description": "Item from questionnaire $(qname)"}"""
+        elseif c ∈ schema.latentColumns
+            latent_name = startswith(c, "l_") ? c[3:end] : c
+            return """    "$c": {"type": ["number", "null"], "description": "Latent variable: $(latent_name)"}"""
         else
             return """    "$c": {"type": ["string", "integer", "number", "null"]}"""
         end

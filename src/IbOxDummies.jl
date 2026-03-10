@@ -20,6 +20,9 @@ to_json(data, schema)
 
 # Export JSON Schema describing the output
 println(to_json_schema(schema))
+
+# Include latent variable values in the output DataFrame
+data, schema = simulate(SimulationConfig(seed = 42, includeLatents = true))
 ```
 
 ## CLI
@@ -41,6 +44,7 @@ using ArgParse
 
 include("types.jl")
 include("demographics.jl")
+include("latents.jl")
 include("questionnaires.jl")
 include("simulator.jl")
 include("output.jl")
@@ -53,21 +57,35 @@ export
     Schema,
     Range,
     CountSpec,
-    Questionnaire,
+    Coefficient,
+    Effect,
+    LatentLoading,
+    QuestionnaireSpec,
     NaughtyMonkeyFn,
     OutputFn,
     DemographicsUpdateFn,
     SimulationConfig,
 
-    # Questionnaire factories
+    # Questionnaire factories (return QuestionnaireSpec)
     make_phq9,
     make_gad7,
     default_questionnaires,
+    default_questionnaire_specs,
+    generate_questionnaire_responses,
+
+    # Latent variable system
+    default_latent_variables,
+    default_coefficients,
+    default_effects,
+    add_numeric_encodings!,
+    precompute_effect_draws,
+    compute_row_latents,
 
     # Demographics helpers
     default_demographics_update,
     default_naughty_monkey,
     generate_demographics,
+    perturb_weights,
     weighted_sample,
     sample_count,
 
