@@ -175,7 +175,11 @@ nItems   = 9
 nLevels  = 4
 noiseSD  = 0.6
 spoilRate = 0.01
+# Uniform loading — all items get the same scale factor:
 loadings = [{latentName = "depression", scale = 2.5}]
+
+# Per-item loading example — each item gets its own scale:
+# loadings = [{latentName = "depression", itemScales = {"1" = 3.0, "2" = 2.5, "3" = 2.0}}]
 ```
 
 See [`examples/default_model.toml`](examples/default_model.toml) for the full default model expressed as TOML.
@@ -308,7 +312,7 @@ data, schema = simulate(SimulationConfig(
 | `SamplerSpec` | `Union{Int, Range, UnivariateDistribution, Function}` — flexible sampler used for counts and random effect values |
 | `LinearEffect` | Fixed linear effect on a latent variable |
 | `RandomEffect` | Random effect on a latent variable; `value::SamplerSpec` (distribution or callable) |
-| `LatentLoading` | Maps a latent variable to a questionnaire item mean via a scale factor |
+| `LatentLoading` | Maps a latent variable to questionnaire item means via a scale factor — either a uniform `Float64` for all items or a `Dict{String,Float64}` of per-item scales |
 | `QuestionnaireSpec` | Declarative Likert-scale questionnaire specification |
 | `DemographicsSpec` | Categorical weight distributions + optional Faker-based custom fields (ethnicity, sex, gender, orientation, and arbitrary `customFields`) |
 | `SimulationConfig` | All simulation parameters with sensible defaults |

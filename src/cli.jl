@@ -288,7 +288,11 @@ Optional keys (with defaults):
 - `nLevels`: Likert levels per item (default: `4`)
 - `noiseSD`: item-level noise standard deviation (default: `0.6`)
 - `spoilRate`: fraction of responses that are random/spoiled (default: `0.01`)
-- `loadings`: array of `{latentName, scale}` tables (default: `[]`)
+- `loadings`: array of loading tables (default: `[]`). Each table must have `latentName`
+  and either:
+  - `scale`: a single `Float64` applied uniformly to all items, or
+  - `itemScales`: a table mapping item index strings (`"1"`, `"2"`, …) to `Float64`
+    scale factors for per-item loading.
 
 ## TOML example
 
@@ -300,7 +304,14 @@ nItems   = 9
 nLevels  = 4
 noiseSD  = 0.6
 spoilRate = 0.01
+# Uniform loading for all items:
 loadings = [{latentName = "depression", scale = 2.5}]
+
+[[questionnaire]]
+name   = "custom_q"
+nItems = 3
+# Per-item loading (items not listed receive scale 0):
+loadings = [{latentName = "depression", itemScales = {"1" = 3.0, "2" = 2.0, "3" = 1.0}}]
 ```
 """
 function parse_questionnaire_spec_from_dict(d::AbstractDict)::QuestionnaireSpec
@@ -311,7 +322,14 @@ function parse_questionnaire_spec_from_dict(d::AbstractDict)::QuestionnaireSpec
     noiseSD   = Float64(get(d, "noiseSD", 0.6))
     spoilRate = Float64(get(d, "spoilRate", 0.01))
     loadings  = LatentLoading[
-        LatentLoading(string(l["latentName"]), Float64(l["scale"]))
+        if haskey(l, "itemScales")
+            LatentLoading(
+                string(l["latentName"]),
+                Dict{String,Float64}(string(k) => Float64(v) for (k, v) in l["itemScales"]),
+            )
+        else
+            LatentLoading(string(l["latentName"]), Float64(l["scale"]))
+        end
         for l in get(d, "loadings", [])
     ]
     return QuestionnaireSpec(name, prefix, nItems, nLevels, loadings, noiseSD, spoilRate)

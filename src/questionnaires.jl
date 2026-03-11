@@ -58,6 +58,9 @@ The mean item score is derived from the weighted sum of latent variable contribu
 (`loadings`). A noise sample from a truncated Normal is added; the result is rounded
 and clamped to `[0, nLevels - 1]`.
 
+Each `LatentLoading` may specify a uniform scale (applied to all items) or a per-item
+scale dict (keyed by item index strings `"1"`, `"2"`, …).
+
 Longitudinal continuity: each item has a 75% chance (given a previous response exists)
 of blending the latent-derived mean with the previous wave's score, producing realistic
 stability over time.
@@ -80,15 +83,20 @@ function generate_questionnaire_responses(
         return result
     end
 
-    # Latent-derived mean score, clamped to valid item range
-    latent_mean = clamp(
-        sum(l.scale * get(latents, l.latentName, 0.0) for l in spec.loadings; init = 0.0),
-        0.0,
-        Float64(spec.nLevels - 1),
-    )
-
     lo = -0.5
     hi = Float64(spec.nLevels) - 0.5
+
+    # Pre-compute per-item scale vectors to avoid repeated type checks inside the loop.
+    # Each entry is a Vector{Float64} of length nItems.
+    item_scales = [
+        if l.scale isa Float64
+            fill(l.scale, spec.nItems)
+        else
+            Float64[get(l.scale, string(i), 0.0) for i in 1:spec.nItems]
+        end
+        for l in spec.loadings
+    ]
+    latent_values = Float64[get(latents, l.latentName, 0.0) for l in spec.loadings]
 
     for i in 1:spec.nItems
         key = "$(spec.prefix)_$i"
@@ -98,6 +106,13 @@ function generate_questionnaire_responses(
             result[key] = rand(rng, 0:(spec.nLevels - 1))
             continue
         end
+
+        # Latent-derived mean score for this item
+        latent_mean = clamp(
+            sum(item_scales[j][i] * latent_values[j] for j in eachindex(spec.loadings); init = 0.0),
+            0.0,
+            Float64(spec.nLevels - 1),
+        )
 
         # Previous value for longitudinal continuity
         prev_val = if !isnothing(prev_responses)

@@ -120,12 +120,16 @@ end
     LatentLoading
 
 Specifies how one latent variable contributes to questionnaire item mean scores.
-`scale` maps the latent value onto the item's Likert scale
-(e.g. `2.5` maps a latent value of 1.0 to a mean item score of 2.5 on a 0–3 scale).
+
+`scale` may be:
+- `Float64` — a uniform scale applied to **all** items in the questionnaire
+  (e.g. `2.5` maps a latent value of 1.0 to a mean item score of 2.5 on a 0–3 scale).
+- `Dict{String,Float64}` — a per-item mapping from item index strings (`"1"`, `"2"`, …)
+  to their individual scale factors. Items not present in the dict receive a scale of 0.
 """
 struct LatentLoading
     latentName::String
-    scale::Float64
+    scale::Union{Float64, Dict{String,Float64}}
 end
 
 """

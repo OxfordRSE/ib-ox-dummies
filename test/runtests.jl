@@ -65,7 +65,13 @@ using IbOxDummies
 
         ll = LatentLoading("depression", 2.5)
         @test ll.latentName == "depression"
+        @test ll.scale isa Float64
         @test ll.scale == 2.5
+
+        ll_per_item = LatentLoading("anxiety", Dict("1" => 2.0, "2" => 1.5, "3" => 0.5))
+        @test ll_per_item.scale isa Dict{String,Float64}
+        @test ll_per_item.scale["1"] ≈ 2.0
+        @test ll_per_item.scale["2"] ≈ 1.5
 
         spec = QuestionnaireSpec("TEST", "tst", 3, 4, [ll], 0.5, 0.01)
         @test spec.name == "TEST"
@@ -820,6 +826,7 @@ using IbOxDummies
         @test qs.spoilRate ≈ 0.01
         @test length(qs.loadings) == 1
         @test qs.loadings[1].latentName == "depression"
+        @test qs.loadings[1].scale isa Float64
         @test qs.loadings[1].scale ≈ 2.5
 
         # Defaults when optional fields omitted
@@ -830,6 +837,22 @@ using IbOxDummies
         @test qs2.spoilRate ≈ 0.01
         @test isempty(qs2.loadings)
         @test qs2.prefix == "myq"  # lowercased, underscores removed
+
+        # Per-item loading via itemScales
+        d_per_item = Dict(
+            "name"   => "MyQ",
+            "nItems" => 3,
+            "loadings" => [Dict(
+                "latentName" => "depression",
+                "itemScales" => Dict("1" => 3.0, "2" => 2.0, "3" => 1.0),
+            )],
+        )
+        qs3 = parse_questionnaire_spec_from_dict(d_per_item)
+        @test length(qs3.loadings) == 1
+        @test qs3.loadings[1].scale isa Dict{String,Float64}
+        @test qs3.loadings[1].scale["1"] ≈ 3.0
+        @test qs3.loadings[1].scale["2"] ≈ 2.0
+        @test qs3.loadings[1].scale["3"] ≈ 1.0
 
         # parse_linear_effect_from_dict
         d_le = Dict("target" => "depression", "inputs" => ["d_age", "_sex_fm"], "value" => 0.005)

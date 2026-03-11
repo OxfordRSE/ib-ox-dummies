@@ -170,7 +170,12 @@ value             = "norm(0,0.1)"
 # Questionnaires
 #
 # 'loadings' maps latent variable names to scale factors for each item's mean.
-# The item mean = clamp(Σ loading.scale × latent_value, 0, nLevels-1), then
+# Each loading entry must have 'latentName' and either:
+#   scale      = <float>   — uniform scale applied to all items
+#   itemScales = {"1" = <float>, "2" = <float>, ...}
+#                          — per-item scale (items not listed receive scale 0)
+#
+# The item mean = clamp(Σ item_scale × latent_value, 0, nLevels-1), then
 # noise is added from a truncated Normal and the result is rounded and clamped.
 # ---------------------------------------------------------------------------
 
@@ -182,6 +187,7 @@ nItems    = 9
 nLevels   = 4
 noiseSD   = 0.6
 spoilRate = 0.01
+# Uniform loading: all 9 items load equally on depression
 loadings  = [{latentName = "depression", scale = 2.5}]
 
 # GAD-7: Generalised Anxiety Disorder — 7 items, 0–3 scale, measures anxiety
@@ -192,6 +198,7 @@ nItems    = 7
 nLevels   = 4
 noiseSD   = 0.6
 spoilRate = 0.01
+# Per-latent uniform loadings: all items load equally on their respective latents
 loadings  = [
     {latentName = "anxiety",    scale = 2.5},
     {latentName = "depression", scale = 0.8},
