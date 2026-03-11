@@ -86,6 +86,8 @@ usage: ib_ox_dummies [--nWaves NWAVES] [--nSchools NSCHOOLS]
                      [--nStudentsPerClass SPEC]
                      [--latentVariables VARS]
                      [--linearEffect EFFECT]... [--randomEffect EFFECT]...
+                     [--ethnicity WEIGHTS] [--sex WEIGHTS]
+                     [--genderIdentity WEIGHTS] [--sexualOrientation WEIGHTS]
                      [--seed SEED] [--output OUTPUT] [--schema]
                      [--version] [-h]
 
@@ -101,6 +103,9 @@ LinearEffect format:  "target:inputs:value"
 RandomEffect format:  "target:numInputs:catInputs:spec"
   e.g. "depression::uid,wave:norm(0,0.15)"  or  "anxiety:::norm(0,0.1)"
 
+Demographics weight format: "Category1:weight1,Category2:weight2,..."
+  e.g. "M:0.49,F:0.49,I:0.02"  or  "White British:0.75,Asian:0.15,Other:0.10"
+
 optional arguments:
   --nWaves NWAVES                          Number of waves (type: Int, default: 3)
   --nSchools NSCHOOLS                      Number of schools (type: Int, default: 10)
@@ -110,6 +115,10 @@ optional arguments:
   --latentVariables VARS                   Comma-separated latent names (default: "depression,anxiety")
   --linearEffect EFFECT                    Add a LinearEffect (repeatable; replaces defaults)
   --randomEffect EFFECT                    Add a RandomEffect (repeatable; replaces defaults)
+  --ethnicity WEIGHTS                      Ethnicity distribution (default: UK 2021 Census)
+  --sex WEIGHTS                            Sex distribution (default: UK 2021 Census)
+  --genderIdentity WEIGHTS                 Gender identity distribution (default: UK 2021 Census)
+  --sexualOrientation WEIGHTS              Sexual orientation distribution (default: UK 2021 Census)
   --seed SEED                              Random seed (type: Int)
   --output OUTPUT                          Output format: csv | json | schema (default: "csv")
   --schema                                 Print JSON Schema and exit
@@ -128,6 +137,12 @@ ib_ox_dummies --nWaves 2 --nSchools 3 --seed 42
 
 # JSON output with Poisson-distributed class sizes
 ib_ox_dummies --nStudentsPerClass poisson(25) --output json
+
+# Custom demographics: equal sex split, simplified ethnicity distribution
+ib_ox_dummies \
+  --sex "M:0.50,F:0.50" \
+  --ethnicity "White British:0.70,Asian:0.20,Black:0.05,Other:0.05" \
+  --nSchools 3 --nWaves 2 --seed 1
 
 # Custom latent model via CLI: depression driven by age + individual baseline + residual
 ib_ox_dummies \
@@ -225,7 +240,7 @@ data, schema = simulate(SimulationConfig(
 | Type | Description |
 |------|-------------|
 | `Response` | `Union{Int, Float64, String, Missing}` — a single answer |
-| `StudentDataRow` | `Dict{String, Response}` — internal per-student-wave record |
+| `DataRow` | `Dict{String, Response}` — internal per-student-wave record |
 | `Schema` | Column metadata (demographics, questionnaire, and latent columns) |
 | `Range` | Inclusive integer range `[min, max]` |
 | `SamplerSpec` | `Union{Int, Range, UnivariateDistribution, Function}` — flexible sampler used for counts and random effect values |

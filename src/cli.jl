@@ -92,8 +92,41 @@ function parse_sampler_spec(s::AbstractString)::SamplerSpec
     ))
 end
 
-# Backward-compatible alias
-const parse_count_spec = parse_sampler_spec
+"""
+    parse_demographics_weights(s) -> Vector{Tuple{String,Float64}}
+
+Parse a demographics weight string into a vector of `(category, weight)` pairs.
+
+Format: `"Category1:weight1,Category2:weight2,..."` where each weight is a
+non-negative float. Weights do not need to sum to 1 (they are renormalised
+internally by `perturb_weights`).
+
+The last `:` in each pair separates the category name from the weight, so
+category names may contain spaces or slashes (e.g. `"White British:0.75"`).
+
+## Examples
+
+```
+"M:0.49,F:0.49,I:0.02"                     → [("M", 0.49), ("F", 0.49), ("I", 0.02)]
+"White British:0.75,Asian:0.15,Other:0.10"  → [("White British", 0.75), ...]
+```
+"""
+function parse_demographics_weights(s::AbstractString)::Vector{Tuple{String,Float64}}
+    isempty(strip(s)) && return Tuple{String,Float64}[]
+    result = Tuple{String,Float64}[]
+    for piece in split(s, ',')
+        piece = strip(piece)
+        isempty(piece) && continue
+        idx = findlast(':', piece)
+        isnothing(idx) && throw(ArgumentError(
+            "Cannot parse demographics weight pair: \"$piece\". " *
+            "Expected format: \"category:weight\" (e.g. \"White British:0.75\")"))
+        cat = strip(piece[1:idx-1])
+        wt  = parse(Float64, strip(piece[idx+1:end]))
+        push!(result, (cat, wt))
+    end
+    return result
+end
 
 """
     parse_linear_effect(s) -> LinearEffect
@@ -167,7 +200,9 @@ function parse_cli_args(args::Vector{String})::SimulationConfig
                       "LinearEffect format: \"target:inputs:value\" " *
                       "(e.g. 'depression:d_age:0.02' or 'anxiety:d_age,_sex_fm:0.004').\n\n" *
                       "RandomEffect format: \"target:numInputs:catInputs:spec\" " *
-                      "(e.g. 'depression::uid,wave:norm(0,0.15)' or 'anxiety:::norm(0,0.1)').",
+                      "(e.g. 'depression::uid,wave:norm(0,0.15)' or 'anxiety:::norm(0,0.1)').\n\n" *
+                      "Demographics weight format: \"Category1:weight1,Category2:weight2,...\" " *
+                      "(e.g. 'M:0.49,F:0.49,I:0.02').",
         prog        = "ib_ox_dummies",
         add_help    = true,
         version     = "0.1.0",
@@ -206,6 +241,22 @@ function parse_cli_args(args::Vector{String})::SimulationConfig
                        "Providing any --randomEffect disables the default random effects."
             action   = :append_arg
             default  = String[]
+        "--ethnicity"
+            help     = "Ethnicity weight distribution: 'Category1:weight1,Category2:weight2,...'. " *
+                       "Empty string uses UK 2021 Census defaults."
+            default  = ""
+        "--sex"
+            help     = "Sex weight distribution: 'M:weight,F:weight,I:weight'. " *
+                       "Empty string uses UK 2021 Census defaults."
+            default  = ""
+        "--genderIdentity"
+            help     = "Gender identity weight distribution: 'Category1:weight1,...'. " *
+                       "Empty string uses UK 2021 Census defaults."
+            default  = ""
+        "--sexualOrientation"
+            help     = "Sexual orientation weight distribution: 'Category1:weight1,...'. " *
+                       "Empty string uses UK 2021 Census defaults."
+            default  = ""
         "--seed"
             help     = "Random seed for reproducibility"
             arg_type = Int
@@ -228,6 +279,23 @@ function parse_cli_args(args::Vector{String})::SimulationConfig
     linear_effs  = LinearEffect[parse_linear_effect(string(e)) for e in le_raw]
     random_effs  = RandomEffect[parse_random_effect(string(e)) for e in re_raw]
 
+    eth_wts  = parse_demographics_weights(parsed["ethnicity"])
+    sex_wts  = parse_demographics_weights(parsed["sex"])
+    gend_wts = parse_demographics_weights(parsed["genderIdentity"])
+    ori_wts  = parse_demographics_weights(parsed["sexualOrientation"])
+
+    # Only set demographicsSpec if at least one field was specified
+    demo_spec = if any(!isempty, [eth_wts, sex_wts, gend_wts, ori_wts])
+        DemographicsSpec(
+            ethnicity         = eth_wts,
+            sex               = sex_wts,
+            genderIdentity    = gend_wts,
+            sexualOrientation = ori_wts,
+        )
+    else
+        nothing
+    end
+
     return SimulationConfig(
         nWaves                     = parsed["nWaves"],
         nSchools                   = parsed["nSchools"],
@@ -237,6 +305,7 @@ function parse_cli_args(args::Vector{String})::SimulationConfig
         latentVariables            = latent_vars,
         linearEffects              = linear_effs,
         randomEffects              = random_effs,
+        demographicsSpec           = demo_spec,
         demographicsUpdateFn       = default_demographics_update,
         naughtyMonkey              = default_naughty_monkey,
         output                     = output,

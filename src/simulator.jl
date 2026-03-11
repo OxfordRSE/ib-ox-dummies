@@ -33,10 +33,10 @@ end
 """
     rows_to_dataframe(rows, schema) -> DataFrame
 
-Convert a `Vector{StudentDataRow}` to a `DataFrame` with columns in canonical order.
+Convert a `Vector{DataRow}` to a `DataFrame` with columns in canonical order.
 Missing values (absent keys) are represented as `missing`.
 """
-function rows_to_dataframe(rows::Vector{StudentDataRow}, schema::Schema)::DataFrame
+function rows_to_dataframe(rows::Vector{DataRow}, schema::Schema)::DataFrame
     cols = column_order(schema)
     return DataFrame(
         [col => [get(row, col, missing) for row in rows] for col in cols]
@@ -111,7 +111,7 @@ function simulate(config::SimulationConfig)::Tuple{DataFrame,Schema}
     end
 
     # --- Stage 2: Build all (student × wave) templates and pre-compute effects ---
-    all_templates = StudentDataRow[]
+    all_templates = DataRow[]
     for wave in 1:config.nWaves, stu in struct_students
         tmpl = copy(stu.demographics)
         tmpl["wave"] = wave
@@ -121,14 +121,14 @@ function simulate(config::SimulationConfig)::Tuple{DataFrame,Schema}
     effect_draws = precompute_effect_draws(rng, effs, all_templates)
 
     # --- Initialise per-student state ---
-    student_history      = Dict{String,Vector{StudentDataRow}}()
-    student_demographics = Dict{String,StudentDataRow}()
+    student_history      = Dict{String,Vector{DataRow}}()
+    student_demographics = Dict{String,DataRow}()
     for stu in struct_students
-        student_history[stu.uid]      = StudentDataRow[]
+        student_history[stu.uid]      = DataRow[]
         student_demographics[stu.uid] = stu.demographics
     end
 
-    all_output = StudentDataRow[]
+    all_output = DataRow[]
 
     # --- Stage 3: Run waves ---
     for wave in 1:config.nWaves

@@ -74,14 +74,14 @@ function default_random_effects()::Vector{RandomEffect}
 end
 
 """
-    add_numeric_encodings!(row::StudentDataRow) -> StudentDataRow
+    add_numeric_encodings!(row::DataRow) -> DataRow
 
 Compute and insert synthetic numeric columns used by `LinearEffect` inputs:
 - `_sex_fm`: effect-coded sex (F = 1.0, M = -1.0, other/intersex = 0.0).
 
 Modifies `row` in-place and returns it.
 """
-function add_numeric_encodings!(row::StudentDataRow)::StudentDataRow
+function add_numeric_encodings!(row::DataRow)::DataRow
     sex = get(row, "d_sex", "")
     row["_sex_fm"] = sex == "F" ? 1.0 : sex == "M" ? -1.0 : 0.0
     return row
@@ -99,7 +99,7 @@ dict because they draw a fresh value on every evaluation (residual error).
 function precompute_effect_draws(
     rng::AbstractRNG,
     effects::Vector{RandomEffect},
-    rows::Vector{StudentDataRow},
+    rows::Vector{DataRow},
 )::Vector{Dict{Any,Float64}}
     draws = Vector{Dict{Any,Float64}}(undef, length(effects))
     for (i, eff) in enumerate(effects)
@@ -130,7 +130,7 @@ error terms (empty `categoricalInputs`).
 """
 function compute_row_latents(
     rng::AbstractRNG,
-    row::StudentDataRow,
+    row::DataRow,
     latent_names::Vector{String},
     linearEffects::Vector{LinearEffect},
     randomEffects::Vector{RandomEffect},

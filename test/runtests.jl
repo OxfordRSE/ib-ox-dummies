@@ -19,11 +19,10 @@ using IbOxDummies
         @test r.max == 5
         @test_throws ArgumentError Range(5, 1)
 
-        # SamplerSpec accepts Distributions.Normal (CountSpec is an alias)
+        # SamplerSpec accepts Distributions.Normal
         nd = Normal(30.0, 7.0)
         @test nd isa UnivariateDistribution
         @test nd isa SamplerSpec
-        @test SamplerSpec === CountSpec  # backward-compatible alias
 
         # SimulationConfig defaults
         cfg = SimulationConfig()
@@ -162,9 +161,6 @@ using IbOxDummies
     end
 
     @testset "parse_sampler_spec" begin
-        # Backward-compatible alias works
-        @test parse_count_spec === parse_sampler_spec
-
         @test parse_sampler_spec("5") == 5
         @test parse_sampler_spec("1:5") == Range(1, 5)
         @test parse_sampler_spec("1,5") == Range(1, 5)
@@ -243,6 +239,31 @@ using IbOxDummies
         @test_throws ArgumentError parse_random_effect("bad:format")
     end
 
+    @testset "parse_demographics_weights" begin
+        # Basic parsing
+        result = parse_demographics_weights("M:0.49,F:0.49,I:0.02")
+        @test length(result) == 3
+        @test ("M", 0.49) in result
+        @test ("F", 0.49) in result
+        @test ("I", 0.02) in result
+
+        # Categories with spaces
+        result2 = parse_demographics_weights("White British:0.75,Asian Other:0.15,Other:0.10")
+        @test length(result2) == 3
+        @test ("White British", 0.75) in result2
+
+        # Single entry
+        result3 = parse_demographics_weights("Heterosexual/Straight:1.0")
+        @test result3 == [("Heterosexual/Straight", 1.0)]
+
+        # Empty string → empty vector
+        @test isempty(parse_demographics_weights(""))
+        @test isempty(parse_demographics_weights("   "))
+
+        # Missing colon → error
+        @test_throws ArgumentError parse_demographics_weights("no_colon")
+    end
+
     @testset "Demographics generation" begin
         rng = MersenneTwister(42)
         demo = generate_demographics(rng, "Test School", 3, 3, "3a", "abc123xyz")
@@ -285,15 +306,15 @@ using IbOxDummies
     end
 
     @testset "add_numeric_encodings!" begin
-        row = StudentDataRow("d_sex" => "F", "yearGroup" => 3)
+        row = DataRow("d_sex" => "F", "yearGroup" => 3)
         add_numeric_encodings!(row)
         @test row["_sex_fm"] == 1.0
 
-        row2 = StudentDataRow("d_sex" => "M", "yearGroup" => 2)
+        row2 = DataRow("d_sex" => "M", "yearGroup" => 2)
         add_numeric_encodings!(row2)
         @test row2["_sex_fm"] == -1.0
 
-        row3 = StudentDataRow("d_sex" => "I")
+        row3 = DataRow("d_sex" => "I")
         add_numeric_encodings!(row3)
         @test row3["_sex_fm"] == 0.0
     end
@@ -308,7 +329,7 @@ using IbOxDummies
         @test updated["d_sex"] == demo["d_sex"]  # copied unchanged
 
         # Empty history returns empty dict
-        @test isempty(default_demographics_update(rng, StudentDataRow[]))
+        @test isempty(default_demographics_update(rng, DataRow[]))
     end
 
     @testset "Latent variable defaults" begin
@@ -344,9 +365,9 @@ using IbOxDummies
                 rng2 -> rand(rng2) < 0.01 ? rand(rng2, Normal(0.75, 0.1)) : 0.0),
         ]
         rows = [
-            StudentDataRow("school" => "School A", "uid" => "u1", "wave" => 1),
-            StudentDataRow("school" => "School B", "uid" => "u2", "wave" => 1),
-            StudentDataRow("school" => "School A", "uid" => "u3", "wave" => 2),
+            DataRow("school" => "School A", "uid" => "u1", "wave" => 1),
+            DataRow("school" => "School B", "uid" => "u2", "wave" => 1),
+            DataRow("school" => "School A", "uid" => "u3", "wave" => 2),
         ]
         draws = precompute_effect_draws(rng, effs, rows)
         @test length(draws) == 3
@@ -368,7 +389,7 @@ using IbOxDummies
         coefs = [LinearEffect("depression", ["d_age"], 0.02)]
         effs  = [RandomEffect("depression", [], ["school"], Normal(0.0, 0.1))]
 
-        rows = [StudentDataRow("d_age" => 13, "school" => "Test School", "wave" => 1)]
+        rows = [DataRow("d_age" => 13, "school" => "Test School", "wave" => 1)]
         draws = precompute_effect_draws(rng, effs, rows)
 
         lv = compute_row_latents(rng, rows[1], lvars, coefs, effs, draws)
@@ -677,6 +698,27 @@ using IbOxDummies
         cfg_hn = parse_cli_args(["--randomEffect", "depression::uid:halfnorm(0,0.2)"])
         @test length(cfg_hn.randomEffects) == 1
         @test cfg_hn.randomEffects[1].value isa UnivariateDistribution
+
+        # Demographics: no flags → demographicsSpec is nothing (uses defaults)
+        cfg_no_demo = parse_cli_args(String[])
+        @test isnothing(cfg_no_demo.demographicsSpec)
+
+        # Demographics: --sex provided → demographicsSpec is set
+        cfg_sex = parse_cli_args(["--sex", "M:0.50,F:0.48,I:0.02"])
+        @test !isnothing(cfg_sex.demographicsSpec)
+        @test length(cfg_sex.demographicsSpec.sex) == 3
+        @test ("M", 0.50) in cfg_sex.demographicsSpec.sex
+        # Unspecified fields are empty (resolved to UK defaults inside simulate())
+        @test isempty(cfg_sex.demographicsSpec.ethnicity)
+
+        # Demographics: multiple fields
+        cfg_demo = parse_cli_args([
+            "--ethnicity", "White British:0.75,Asian:0.15,Other:0.10",
+            "--sex", "M:0.50,F:0.50",
+        ])
+        @test !isnothing(cfg_demo.demographicsSpec)
+        @test length(cfg_demo.demographicsSpec.ethnicity) == 3
+        @test length(cfg_demo.demographicsSpec.sex) == 2
     end
 
     @testset "CLI complex model (default-model equivalent)" begin
@@ -743,8 +785,8 @@ using IbOxDummies
     @testset "rows_to_dataframe" begin
         schema = build_schema(default_questionnaires())
         rows = [
-            StudentDataRow("wave" => 1, "uid" => "abc", "school" => "Test", "phq9_1" => 2),
-            StudentDataRow("wave" => 2, "uid" => "abc", "school" => "Test", "phq9_1" => missing),
+            DataRow("wave" => 1, "uid" => "abc", "school" => "Test", "phq9_1" => 2),
+            DataRow("wave" => 2, "uid" => "abc", "school" => "Test", "phq9_1" => missing),
         ]
         df = rows_to_dataframe(rows, schema)
         @test df isa DataFrame

@@ -70,11 +70,10 @@ include("cli.jl")
 export
     # Core types
     Response,
-    StudentDataRow,
+    DataRow,
     Schema,
     Range,
     SamplerSpec,
-    CountSpec,       # backward-compatible alias for SamplerSpec
     LinearEffect,
     RandomEffect,
     LatentLoading,
@@ -122,8 +121,8 @@ export
     ib_ox_dummies_cli,
     parse_cli_args,
     parse_sampler_spec,
-    parse_count_spec,    # backward-compatible alias for parse_sampler_spec
     parse_linear_effect,
-    parse_random_effect
+    parse_random_effect,
+    parse_demographics_weights
 
 end

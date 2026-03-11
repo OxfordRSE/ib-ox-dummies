@@ -7,12 +7,12 @@ Can be an integer, float, string, or missing (unanswered/redacted).
 const Response = Union{Int,Float64,String,Missing}
 
 """
-    StudentDataRow
+    DataRow
 
-Questionnaire data: a named record of answer data representing one row
-(one student × one wave).
+A named record of answer data representing one row (one student × one wave).
+Keys are column names; values are `Response` entries.
 """
-const StudentDataRow = Dict{String,Response}
+const DataRow = Dict{String,Response}
 
 """
     Schema
@@ -75,8 +75,6 @@ rng -> rand(rng) < 0.01 ? rand(rng, Normal(0.75, 0.1)) : 0.0  # custom: MDE
 """
 const SamplerSpec = Union{Int,Range,UnivariateDistribution,Function}
 
-# Backward-compatible alias kept for any code that still references CountSpec
-const CountSpec = SamplerSpec
 
 """
     LinearEffect
@@ -155,7 +153,7 @@ Each field is a vector of `(category, weight)` pairs whose weights sum to 1.
 
 The optional `customFields` dictionary maps output column names to zero-argument
 functions that produce a value (e.g. `Dict("d_city" => () -> Faker.city())`).
-These fields are included in every generated `StudentDataRow` and in the `Schema`.
+These fields are included in every generated `DataRow` and in the `Schema`.
 
 Use `default_demographics_spec()` from `demographics.jl` to get the UK-census-derived defaults.
 """
@@ -179,9 +177,9 @@ left at their defaults.
 Base.@kwdef struct SimulationConfig
     nWaves::Int = 3
     nSchools::Int = 10
-    nYeargroupsPerSchool::CountSpec = 5
-    nClassesPerSchoolYeargroup::CountSpec = Range(1, 5)
-    nStudentsPerClass::CountSpec = Normal(30.0, 7.0)
+    nYeargroupsPerSchool::SamplerSpec = 5
+    nClassesPerSchoolYeargroup::SamplerSpec = Range(1, 5)
+    nStudentsPerClass::SamplerSpec = Normal(30.0, 7.0)
     questionnaires::Vector{QuestionnaireSpec} = QuestionnaireSpec[]
     latentVariables::Vector{String} = String[]
     linearEffects::Vector{LinearEffect} = LinearEffect[]

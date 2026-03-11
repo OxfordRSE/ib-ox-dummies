@@ -189,7 +189,7 @@ function perturb_weights(
 end
 
 """
-    generate_demographics(rng, school_name, yeargroup, school_year, class_label, uid; ...) -> StudentDataRow
+    generate_demographics(rng, school_name, yeargroup, school_year, class_label, uid; ...) -> DataRow
 
 Generate initial demographics for one student.
 
@@ -210,7 +210,7 @@ function generate_demographics(
     gender_weights::Vector{Tuple{String,Float64}}       = GENDER_IDENTITY_WEIGHTS,
     orientation_weights::Vector{Tuple{String,Float64}}  = SEXUAL_ORIENTATION_WEIGHTS,
     custom_fields::Dict{String,Function}                = Dict{String,Function}(),
-)::StudentDataRow
+)::DataRow
     sex = weighted_sample(rng, sex_weights)
     name = generate_name(sex)
     age = 9 + school_year  # approximate age from school year
@@ -218,7 +218,7 @@ function generate_demographics(
     sexual_orientation = weighted_sample(rng, orientation_weights)
     gender_identity = weighted_sample(rng, gender_weights)
 
-    row = StudentDataRow(
+    row = DataRow(
         "uid"          => uid,
         "name"         => name,
         "school"       => school_name,
@@ -240,13 +240,13 @@ function generate_demographics(
 end
 
 """
-    default_demographics_update(rng, prevData) -> StudentDataRow
+    default_demographics_update(rng, prevData) -> DataRow
 
 Default demographics update function. Increments age by 1 and otherwise
 copies forward all demographics from the most recent wave.
 """
-function default_demographics_update(rng::AbstractRNG, prevData::Vector{StudentDataRow})::StudentDataRow
-    isempty(prevData) && return StudentDataRow()
+function default_demographics_update(rng::AbstractRNG, prevData::Vector{DataRow})::DataRow
+    isempty(prevData) && return DataRow()
     latest = prevData[end]
     updated = copy(latest)
 
@@ -261,16 +261,16 @@ function default_demographics_update(rng::AbstractRNG, prevData::Vector{StudentD
 end
 
 """
-    default_naughty_monkey(rng, output, schema) -> Vector{StudentDataRow}
+    default_naughty_monkey(rng, output, schema) -> Vector{DataRow}
 
 Default naughty-monkey function: removes ~0.25% of questionnaire data cells
 and ~5% of demographics data cells at random by replacing them with `missing`.
 """
 function default_naughty_monkey(
     rng::AbstractRNG,
-    output::Vector{StudentDataRow},
+    output::Vector{DataRow},
     schema::Schema,
-)::Vector{StudentDataRow}
+)::Vector{DataRow}
     result = deepcopy(output)
     q_cols = collect(keys(schema.questionnaireColumns))
     d_cols = schema.demographicsColumns
