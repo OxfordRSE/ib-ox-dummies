@@ -15,8 +15,18 @@ derived from their individual latent values at each wave, composed from:
 ```julia
 using IbOxDummies
 
-# Run with defaults (3 waves, 10 schools, PHQ-9 + GAD-7 driven by latent depression/anxiety)
-data, schema = simulate(SimulationConfig(seed = 42))
+# Questionnaires and latent variables must be specified explicitly.
+# Use default_questionnaires() for the built-in PHQ-9 + GAD-7 model:
+data, schema = simulate(SimulationConfig(
+    seed           = 42,
+    latentVariables = default_latent_variables(),
+    linearEffects  = default_linear_effects(),
+    randomEffects  = default_random_effects(),
+    questionnaires  = default_questionnaires(),
+))
+
+# Or load a model from a TOML config file (CLI):
+#   ib_ox_dummies --config examples/minimal_model.toml --seed 42
 
 # Write as CSV (uses CSV.jl)
 to_csv(data, schema)

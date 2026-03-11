@@ -1,0 +1,58 @@
+# IbOxDummies minimal model example
+#
+# A minimal model with:
+# - Default Ns (3 waves, 10 schools, 5 yeargroups, 1-5 classes, ~30 students)
+# - One latent variable: depression
+# - One random effect: per individual × wave (models individual episode variation)
+# - One questionnaire: 3-item depression scale on a 7-level (0-6) scale,
+#   loading heavily onto the depression latent variable
+#
+# Run with:
+#   ib_ox_dummies --config examples/minimal_model.toml
+#
+# Override individual settings from the command line, e.g.:
+#   ib_ox_dummies --config examples/minimal_model.toml --nWaves 1 --seed 42
+
+# ---------------------------------------------------------------------------
+# Simulation parameters
+# ---------------------------------------------------------------------------
+
+[simulation]
+nWaves                     = 3
+nSchools                   = 10
+nYeargroupsPerSchool       = "5"         # fixed integer
+nClassesPerSchoolYeargroup = "1:5"       # uniform sample from [1, 5]
+nStudentsPerClass          = "norm(30,7)" # Normal distribution
+latentVariables            = ["depression"]
+# seed = 42                              # uncomment for reproducible output
+
+# ---------------------------------------------------------------------------
+# Random effects
+#
+# One draw per unique combination of categoricalInputs.
+# 'value' is a SamplerSpec string: norm(μ,σ), halfnorm(μ,σ), etc.
+# ---------------------------------------------------------------------------
+
+# Per-individual × wave random effect — models wave-to-wave mood variation
+[[randomEffect]]
+target            = "depression"
+numericalInputs   = []
+categoricalInputs = ["uid", "wave"]
+value             = "norm(0,0.3)"
+
+# ---------------------------------------------------------------------------
+# Questionnaires
+#
+# A minimal 3-item depression questionnaire on a 7-level (0-6) scale.
+# The heavy loading (scale = 5.0) means a latent depression value of 1.0
+# maps to a mean item score of 5.0 on the 0-6 scale.
+# ---------------------------------------------------------------------------
+
+[[questionnaire]]
+name      = "Depression_3"
+prefix    = "dep"
+nItems    = 3
+nLevels   = 7
+noiseSD   = 0.8
+spoilRate = 0.01
+loadings  = [{latentName = "depression", scale = 5.0}]

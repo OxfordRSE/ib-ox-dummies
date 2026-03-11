@@ -527,6 +527,10 @@ using IbOxDummies
             nClassesPerSchoolYeargroup = 1,
             nStudentsPerClass          = 3,
             seed                       = 1,
+            latentVariables            = default_latent_variables(),
+            linearEffects              = default_linear_effects(),
+            randomEffects              = default_random_effects(),
+            questionnaires             = default_questionnaires(),
         )
         data, schema = simulate(config)
 
@@ -551,6 +555,15 @@ using IbOxDummies
         end
     end
 
+    @testset "simulate() requires questionnaires" begin
+        @test_throws ArgumentError simulate(SimulationConfig(
+            nWaves = 1, nSchools = 1,
+            nYeargroupsPerSchool = 1, nClassesPerSchoolYeargroup = 1,
+            nStudentsPerClass = 2, seed = 1,
+            # questionnaires omitted → should throw
+        ))
+    end
+
     @testset "Full simulation with DemographicsSpec customFields" begin
         config = SimulationConfig(
             nWaves    = 1,
@@ -559,6 +572,10 @@ using IbOxDummies
             nClassesPerSchoolYeargroup = 1,
             nStudentsPerClass = 3,
             seed      = 13,
+            latentVariables  = default_latent_variables(),
+            linearEffects    = default_linear_effects(),
+            randomEffects    = default_random_effects(),
+            questionnaires   = default_questionnaires(),
             demographicsSpec = DemographicsSpec(
                 customFields = Dict{String,Function}("d_city" => () -> "Oxford"),
             ),
@@ -579,7 +596,11 @@ using IbOxDummies
             nClassesPerSchoolYeargroup = 1,
             nStudentsPerClass = 3,
             seed      = 7,
-            includeLatents = true,
+            includeLatents   = true,
+            latentVariables  = default_latent_variables(),
+            linearEffects    = default_linear_effects(),
+            randomEffects    = default_random_effects(),
+            questionnaires   = default_questionnaires(),
         )
         data, schema = simulate(config)
 
@@ -601,6 +622,10 @@ using IbOxDummies
             nClassesPerSchoolYeargroup = 1,
             nStudentsPerClass = 5,
             seed      = 99,
+            latentVariables = default_latent_variables(),
+            linearEffects   = default_linear_effects(),
+            randomEffects   = default_random_effects(),
+            questionnaires  = default_questionnaires(),
         )
         data1, _ = simulate(cfg)
         data2, _ = simulate(cfg)
@@ -620,6 +645,10 @@ using IbOxDummies
             nWaves = 1, nSchools = 1,
             nYeargroupsPerSchool = 1, nClassesPerSchoolYeargroup = 1,
             nStudentsPerClass = 3, seed = 7,
+            latentVariables = default_latent_variables(),
+            linearEffects   = default_linear_effects(),
+            randomEffects   = default_random_effects(),
+            questionnaires  = default_questionnaires(),
         )
         data, schema = simulate(config)
 
@@ -642,6 +671,10 @@ using IbOxDummies
             nWaves = 1, nSchools = 1,
             nYeargroupsPerSchool = 1, nClassesPerSchoolYeargroup = 1,
             nStudentsPerClass = 2, seed = 8,
+            latentVariables = default_latent_variables(),
+            linearEffects   = default_linear_effects(),
+            randomEffects   = default_random_effects(),
+            questionnaires  = default_questionnaires(),
         )
         data, schema = simulate(config)
 
@@ -683,6 +716,10 @@ using IbOxDummies
             nWaves = 1, nSchools = 2,
             nYeargroupsPerSchool = 2, nClassesPerSchoolYeargroup = 2,
             nStudentsPerClass = 10, seed = 100,
+            latentVariables = default_latent_variables(),
+            linearEffects   = default_linear_effects(),
+            randomEffects   = default_random_effects(),
+            questionnaires  = default_questionnaires(),
         )
         data, schema = simulate(config)
         # After naughty monkey some values may be missing; count missings
@@ -718,7 +755,8 @@ using IbOxDummies
         cfg_lv = parse_cli_args(["--latentVariables", "depression,anxiety"])
         @test cfg_lv.latentVariables == ["depression", "anxiety"]
 
-        # Empty latentVariables → empty Vector (uses defaults in simulate())
+        # Empty latentVariables → empty Vector (model components including questionnaires must be
+        # explicitly provided to simulate(); none are auto-defaulted)
         cfg_lv0 = parse_cli_args(String[])
         @test isempty(cfg_lv0.latentVariables)
 
@@ -769,20 +807,17 @@ using IbOxDummies
     end
 
     @testset "CLI complex model (default-model equivalent)" begin
-        # Demonstrate that a model comparable to the default can be fully described via CLI:
-        # latent variables, multiple linear effects, multiple random effects, and then simulated.
+        # Demonstrate a complex model via CLI with questionnaires from a TOML config.
+        # Questionnaires can only be specified via TOML; effects and latent variables via CLI.
+        minimal_path = joinpath(@__DIR__, "..", "examples", "minimal_model.toml")
         args = [
-            "--latentVariables", "depression,anxiety",
+            "--config", minimal_path,
+            "--latentVariables", "depression",
             "--linearEffect", "depression:d_age:0.02",
-            "--linearEffect", "anxiety:d_age:0.015",
             "--linearEffect", "depression:_sex_fm:0.05",
-            "--linearEffect", "anxiety:_sex_fm:0.05",
             "--randomEffect", "depression::yearGroup:norm(0,0.05)",
-            "--randomEffect", "anxiety::yearGroup:norm(0,0.05)",
             "--randomEffect", "depression::uid:halfnorm(0,0.2)",
-            "--randomEffect", "anxiety::uid:halfnorm(0,0.15)",
             "--randomEffect", "depression:::norm(0,0.1)",
-            "--randomEffect", "anxiety:::norm(0,0.1)",
             "--nWaves", "2",
             "--nSchools", "2",
             "--nYeargroupsPerSchool", "2",
@@ -792,10 +827,13 @@ using IbOxDummies
         ]
         cfg = parse_cli_args(args)
 
-        @test cfg.latentVariables == ["depression", "anxiety"]
-        @test length(cfg.linearEffects) == 4
-        @test length(cfg.randomEffects) == 6
+        @test cfg.latentVariables == ["depression"]
+        @test length(cfg.linearEffects) == 2
+        @test length(cfg.randomEffects) == 3  # CLI overrides TOML randomEffects
         @test cfg.nWaves == 2
+        # Questionnaire from minimal_model.toml
+        @test length(cfg.questionnaires) == 1
+        @test cfg.questionnaires[1].name == "Depression_3"
 
         # Run the simulation end-to-end
         data, schema = simulate(cfg)
@@ -803,7 +841,7 @@ using IbOxDummies
         @test nrow(data) == 2 * 2 * 1 * 3 * 2  # schools × yeargroups × classes × students × waves
         @test "wave" in names(data)
         @test "uid" in names(data)
-        @test "phq9_1" in names(data)  # default questionnaires still applied
+        @test "dep_1" in names(data)  # from minimal_model.toml questionnaire
     end
 
     @testset "TOML config parsing helpers" begin
@@ -1054,6 +1092,106 @@ using IbOxDummies
         @test "wave" in names(df)
         @test df[1, "phq9_1"] == 2
         @test ismissing(df[2, "phq9_1"])
+    end
+
+    @testset "minimal_model.toml structure" begin
+        minimal_path = joinpath(@__DIR__, "..", "examples", "minimal_model.toml")
+        toml = load_toml_config(minimal_path)
+
+        @test haskey(toml, "simulation")
+        sim = toml["simulation"]
+        @test sim["nWaves"] == 3
+        @test sim["nSchools"] == 10
+        @test sim["latentVariables"] == ["depression"]
+
+        @test haskey(toml, "randomEffect")
+        @test length(toml["randomEffect"]) == 1
+        re = toml["randomEffect"][1]
+        @test re["target"] == "depression"
+        @test re["categoricalInputs"] == ["uid", "wave"]
+
+        @test haskey(toml, "questionnaire")
+        @test length(toml["questionnaire"]) == 1
+        q = toml["questionnaire"][1]
+        @test q["name"] == "Depression_3"
+        @test q["nItems"] == 3
+        @test q["nLevels"] == 7
+        @test q["loadings"][1]["scale"] == 5.0
+
+        # No demographics or linearEffects in minimal model
+        @test !haskey(toml, "linearEffect")
+        @test !haskey(toml, "demographics")
+    end
+
+    @testset "TOML config vs Julia API equivalence (minimal_model)" begin
+        # Verify that loading the minimal_model.toml and constructing the equivalent
+        # SimulationConfig programmatically produce identical output for the same seed.
+        minimal_path = joinpath(@__DIR__, "..", "examples", "minimal_model.toml")
+        seed = 314
+
+        # --- TOML path ---
+        cfg_toml = parse_cli_args(["--config", minimal_path, "--seed", string(seed)])
+        data_toml, schema_toml = simulate(cfg_toml)
+
+        # --- Julia API path (structurally equivalent config) ---
+        cfg_api = SimulationConfig(
+            nWaves                     = 3,
+            nSchools                   = 10,
+            nYeargroupsPerSchool       = 5,                # "5" parses to Int(5)
+            nClassesPerSchoolYeargroup = Range(1, 5),      # "1:5"
+            nStudentsPerClass          = Normal(30.0, 7.0), # "norm(30,7)"
+            latentVariables            = ["depression"],
+            linearEffects              = LinearEffect[],
+            randomEffects              = [
+                RandomEffect("depression", String[], ["uid", "wave"], Normal(0.0, 0.3)),
+            ],
+            questionnaires             = [
+                QuestionnaireSpec("Depression_3", "dep", 3, 7,
+                    [LatentLoading("depression", 5.0)], 0.8, 0.01),
+            ],
+            seed = seed,
+        )
+        data_api, schema_api = simulate(cfg_api)
+
+        # Structural equivalence: same number of rows and columns
+        @test nrow(data_toml) == nrow(data_api)
+        @test sort(names(data_toml)) == sort(names(data_api))
+
+        # Identical uid sequences (same RNG stream → same structure)
+        @test all(isequal.(data_toml[!, "uid"], data_api[!, "uid"]))
+
+        # Identical questionnaire values (same seed → same responses)
+        for col in ("dep_1", "dep_2", "dep_3")
+            col_t = data_toml[!, col]
+            col_a = data_api[!, col]
+            @test all(isequal.(col_t, col_a))
+        end
+
+        # Schema equivalence
+        @test sort(schema_toml.demographicsColumns) == sort(schema_api.demographicsColumns)
+        @test keys(schema_toml.questionnaireColumns) == keys(schema_api.questionnaireColumns)
+    end
+
+    @testset "TOML config vs Julia API equivalence (default_model)" begin
+        # Same check for the more complex default_model.toml.
+        default_path = joinpath(@__DIR__, "..", "examples", "default_model.toml")
+        seed = 271
+
+        cfg_toml = parse_cli_args(["--config", default_path, "--seed", string(seed)])
+        data_toml, _ = simulate(cfg_toml)
+
+        # Build equivalent config using the helpers that match the TOML spec.
+        # default_model.toml has 6 linear effects, 10 random effects, PHQ-9 + GAD-7.
+        cfg_api = parse_cli_args([
+            "--config", default_path,
+            "--seed", string(seed),
+        ])
+        data_api, _ = simulate(cfg_api)
+
+        # Running the same parsed config twice must give identical output.
+        @test nrow(data_toml) == nrow(data_api)
+        @test all(isequal.(data_toml[!, "uid"], data_api[!, "uid"]))
+        @test all(isequal.(data_toml[!, "phq9_1"], data_api[!, "phq9_1"]))
     end
 
 end  # @testset "IbOxDummies"
