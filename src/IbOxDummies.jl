@@ -73,7 +73,8 @@ export
     StudentDataRow,
     Schema,
     Range,
-    CountSpec,
+    SamplerSpec,
+    CountSpec,       # backward-compatible alias for SamplerSpec
     LinearEffect,
     RandomEffect,
     LatentLoading,
@@ -103,6 +104,7 @@ export
     perturb_weights,
     weighted_sample,
     sample_count,
+    draw_sampler,
 
     # Simulation
     simulate,
@@ -119,6 +121,9 @@ export
     # CLI
     ib_ox_dummies_cli,
     parse_cli_args,
-    parse_count_spec
+    parse_sampler_spec,
+    parse_count_spec,    # backward-compatible alias for parse_sampler_spec
+    parse_linear_effect,
+    parse_random_effect
 
 end

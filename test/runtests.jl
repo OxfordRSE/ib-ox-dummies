@@ -19,9 +19,11 @@ using IbOxDummies
         @test r.max == 5
         @test_throws ArgumentError Range(5, 1)
 
-        # CountSpec accepts Distributions.Normal
+        # SamplerSpec accepts Distributions.Normal (CountSpec is an alias)
         nd = Normal(30.0, 7.0)
         @test nd isa UnivariateDistribution
+        @test nd isa SamplerSpec
+        @test SamplerSpec === CountSpec  # backward-compatible alias
 
         # SimulationConfig defaults
         cfg = SimulationConfig()
@@ -30,6 +32,7 @@ using IbOxDummies
         @test cfg.output == "csv"
         @test isnothing(cfg.seed)
         @test cfg.nStudentsPerClass isa Normal
+        @test cfg.nStudentsPerClass isa SamplerSpec
         @test cfg.includeLatents == false
         @test cfg.demographicPerturbationSD == 0.05
         @test isempty(cfg.questionnaires)
@@ -43,14 +46,23 @@ using IbOxDummies
         @test haskey(ds.customFields, "d_city")
         @test ds.customFields["d_city"]() == "TestCity"
 
-        # New struct types exist
+        # LinearEffect
         c = LinearEffect("depression", ["d_age"], 0.02)
         @test c.target == "depression"
         @test c.value == 0.02
 
+        # RandomEffect with UnivariateDistribution
         e = RandomEffect("anxiety", [], ["uid"], Normal(0.0, 0.1))
         @test e.target == "anxiety"
         @test isempty(e.numericalInputs)
+        @test e.value isa UnivariateDistribution
+        @test e.value isa SamplerSpec
+
+        # RandomEffect with Function (SamplerSpec)
+        mde = RandomEffect("depression", [], ["uid", "wave"],
+            rng -> rand(rng) < 0.01 ? rand(rng, Normal(0.75, 0.1)) : 0.0)
+        @test mde.value isa Function
+        @test mde.value isa SamplerSpec
 
         ll = LatentLoading("depression", 2.5)
         @test ll.latentName == "depression"
@@ -102,6 +114,41 @@ using IbOxDummies
         @test sample_count(rng, _ -> 7.0) isa Int
     end
 
+    @testset "draw_sampler" begin
+        rng = MersenneTwister(1)
+
+        # Fixed Int → exact Float64
+        @test draw_sampler(rng, 5) === 5.0
+        @test draw_sampler(rng, 0) === 0.0
+
+        # Range → value within range
+        rng = MersenneTwister(42)
+        for _ in 1:20
+            v = draw_sampler(rng, Range(2, 6))
+            @test 2.0 <= v <= 6.0
+        end
+
+        # UnivariateDistribution → Float64
+        rng = MersenneTwister(42)
+        v = draw_sampler(rng, Normal(0.0, 0.2))
+        @test v isa Float64
+
+        # Truncated normal → always ≥ 0
+        rng = MersenneTwister(42)
+        for _ in 1:20
+            v = draw_sampler(rng, truncated(Normal(0.0, 0.2), 0.0, Inf))
+            @test v >= 0.0
+        end
+
+        # Function callable (MDE-style)
+        rng = MersenneTwister(123)
+        mde_fn = rng2 -> rand(rng2) < 0.01 ? rand(rng2, Normal(0.75, 0.1)) : 0.0
+        vals = [draw_sampler(rng, mde_fn) for _ in 1:1000]
+        @test all(v isa Float64 for v in vals)
+        # With p=0.01 and 1000 draws, P(no events) ≈ 4.3e-5; expect mostly zeros but some non-zero
+        @test count(==(0.0), vals) > 900  # at least 90% zeros
+    end
+
     @testset "weighted_sample" begin
         rng = MersenneTwister(0)
         opts = [("A", 0.9), ("B", 0.1)]
@@ -114,25 +161,86 @@ using IbOxDummies
         @test counts["B"] > 50
     end
 
-    @testset "parse_count_spec" begin
-        @test parse_count_spec("5") == 5
-        @test parse_count_spec("1:5") == Range(1, 5)
-        @test parse_count_spec("1,5") == Range(1, 5)
-        @test parse_count_spec("norm(30,7)") == Normal(30.0, 7.0)
-        @test parse_count_spec("normal(30,7)") == Normal(30.0, 7.0)
-        @test parse_count_spec("dnorm(30,7)") == Normal(30.0, 7.0)
-        @test parse_count_spec("pois(5)") == Poisson(5.0)
-        @test parse_count_spec("poisson(5)") == Poisson(5.0)
-        @test parse_count_spec("negbinom(5,0.5)") == NegativeBinomial(5, 0.5)
-        @test parse_count_spec("negativebinomial(5,0.5)") == NegativeBinomial(5, 0.5)
-        @test parse_count_spec("lognorm(3,0.5)") == LogNormal(3.0, 0.5)
-        @test parse_count_spec("lognormal(3,0.5)") == LogNormal(3.0, 0.5)
-        @test parse_count_spec("unif(1,10)") == DiscreteUniform(1, 10)
-        @test parse_count_spec("uniform(1,10)") == DiscreteUniform(1, 10)
-        @test parse_count_spec("exp(0.1)") == Exponential(10.0)
-        @test parse_count_spec("exponential(0.1)") == Exponential(10.0)
-        @test parse_count_spec("gamma(2,3)") == Gamma(2.0, 3.0)
-        @test_throws ArgumentError parse_count_spec("garbage")
+    @testset "parse_sampler_spec" begin
+        # Backward-compatible alias works
+        @test parse_count_spec === parse_sampler_spec
+
+        @test parse_sampler_spec("5") == 5
+        @test parse_sampler_spec("1:5") == Range(1, 5)
+        @test parse_sampler_spec("1,5") == Range(1, 5)
+        @test parse_sampler_spec("norm(30,7)") == Normal(30.0, 7.0)
+        @test parse_sampler_spec("normal(30,7)") == Normal(30.0, 7.0)
+        @test parse_sampler_spec("dnorm(30,7)") == Normal(30.0, 7.0)
+        @test parse_sampler_spec("pois(5)") == Poisson(5.0)
+        @test parse_sampler_spec("poisson(5)") == Poisson(5.0)
+        @test parse_sampler_spec("negbinom(5,0.5)") == NegativeBinomial(5, 0.5)
+        @test parse_sampler_spec("negativebinomial(5,0.5)") == NegativeBinomial(5, 0.5)
+        @test parse_sampler_spec("lognorm(3,0.5)") == LogNormal(3.0, 0.5)
+        @test parse_sampler_spec("lognormal(3,0.5)") == LogNormal(3.0, 0.5)
+        @test parse_sampler_spec("unif(1,10)") == DiscreteUniform(1, 10)
+        @test parse_sampler_spec("uniform(1,10)") == DiscreteUniform(1, 10)
+        @test parse_sampler_spec("exp(0.1)") == Exponential(10.0)
+        @test parse_sampler_spec("exponential(0.1)") == Exponential(10.0)
+        @test parse_sampler_spec("gamma(2,3)") == Gamma(2.0, 3.0)
+
+        # Half-normal: truncated Normal at 0
+        hn = parse_sampler_spec("halfnorm(0,0.2)")
+        @test hn isa UnivariateDistribution
+        rng = MersenneTwister(1)
+        for _ in 1:20
+            @test rand(rng, hn) >= 0.0
+        end
+        hn2 = parse_sampler_spec("hnorm(0,0.2)")
+        @test hn2 isa UnivariateDistribution
+
+        @test_throws ArgumentError parse_sampler_spec("garbage")
+    end
+
+    @testset "parse_linear_effect" begin
+        e1 = parse_linear_effect("depression:d_age:0.02")
+        @test e1.target == "depression"
+        @test e1.inputs == ["d_age"]
+        @test e1.value ≈ 0.02
+
+        e2 = parse_linear_effect("anxiety:d_age,_sex_fm:0.004")
+        @test e2.target == "anxiety"
+        @test e2.inputs == ["d_age", "_sex_fm"]
+        @test e2.value ≈ 0.004
+
+        # Intercept (no inputs)
+        e3 = parse_linear_effect("depression::0.1")
+        @test e3.target == "depression"
+        @test isempty(e3.inputs)
+        @test e3.value ≈ 0.1
+
+        @test_throws ArgumentError parse_linear_effect("bad_format")
+    end
+
+    @testset "parse_random_effect" begin
+        r1 = parse_random_effect("depression::uid,wave:norm(0,0.15)")
+        @test r1.target == "depression"
+        @test isempty(r1.numericalInputs)
+        @test r1.categoricalInputs == ["uid", "wave"]
+        @test r1.value == Normal(0.0, 0.15)
+
+        # Residual (no categorical inputs)
+        r2 = parse_random_effect("anxiety:::norm(0,0.1)")
+        @test r2.target == "anxiety"
+        @test isempty(r2.numericalInputs)
+        @test isempty(r2.categoricalInputs)
+        @test r2.value == Normal(0.0, 0.1)
+
+        # Half-normal baseline
+        r3 = parse_random_effect("depression::uid:halfnorm(0,0.2)")
+        @test r3.target == "depression"
+        @test r3.categoricalInputs == ["uid"]
+        @test r3.value isa UnivariateDistribution
+        rng = MersenneTwister(1)
+        for _ in 1:10
+            @test rand(rng, r3.value) >= 0.0
+        end
+
+        @test_throws ArgumentError parse_random_effect("bad:format")
     end
 
     @testset "Demographics generation" begin
@@ -219,6 +327,11 @@ using IbOxDummies
         @test any(e.target == "anxiety" for e in effs)
         # Error term: Effect with empty inputs
         @test any(isempty(e.categoricalInputs) && isempty(e.numericalInputs) for e in effs)
+        # MDE effect: Function-valued RandomEffect targeting depression
+        mde_effs = filter(e -> e.target == "depression" && e.value isa Function, effs)
+        @test !isempty(mde_effs)
+        # MDE should be per (uid, wave)
+        @test any(e.categoricalInputs == ["uid", "wave"] && e.value isa Function for e in effs)
     end
 
     @testset "precompute_effect_draws" begin
@@ -226,6 +339,9 @@ using IbOxDummies
         effs = [
             RandomEffect("depression", [], ["school"], Normal(0.0, 0.1)),
             RandomEffect("anxiety",    [], [],          Normal(0.0, 0.05)),  # error term
+            # Function-valued effect (MDE-style)
+            RandomEffect("depression", [], ["uid", "wave"],
+                rng2 -> rand(rng2) < 0.01 ? rand(rng2, Normal(0.75, 0.1)) : 0.0),
         ]
         rows = [
             StudentDataRow("school" => "School A", "uid" => "u1", "wave" => 1),
@@ -233,13 +349,17 @@ using IbOxDummies
             StudentDataRow("school" => "School A", "uid" => "u3", "wave" => 2),
         ]
         draws = precompute_effect_draws(rng, effs, rows)
-        @test length(draws) == 2
+        @test length(draws) == 3
         # First effect: one draw per unique school (A and B)
         @test length(draws[1]) == 2
         @test haskey(draws[1], ("School A",))
         @test haskey(draws[1], ("School B",))
         # Second effect (error term): empty dict
         @test isempty(draws[2])
+        # Third effect (Function): one entry per (uid, wave) combination
+        @test length(draws[3]) == 3
+        # All values are Float64
+        @test all(v isa Float64 for v in values(draws[3]))
     end
 
     @testset "compute_row_latents" begin
@@ -525,6 +645,76 @@ using IbOxDummies
         # ArgParse calls exit(1) for unrecognised flags; test valid args parse correctly
         cfg_ok = parse_cli_args(["--nWaves", "1"])
         @test cfg_ok.nWaves == 1
+
+        # latentVariables
+        cfg_lv = parse_cli_args(["--latentVariables", "depression,anxiety"])
+        @test cfg_lv.latentVariables == ["depression", "anxiety"]
+
+        # Empty latentVariables → empty Vector (uses defaults in simulate())
+        cfg_lv0 = parse_cli_args(String[])
+        @test isempty(cfg_lv0.latentVariables)
+
+        # --linearEffect (single)
+        cfg_le = parse_cli_args(["--linearEffect", "depression:d_age:0.02"])
+        @test length(cfg_le.linearEffects) == 1
+        @test cfg_le.linearEffects[1].target == "depression"
+        @test cfg_le.linearEffects[1].value ≈ 0.02
+
+        # --linearEffect (multiple)
+        cfg_le2 = parse_cli_args([
+            "--linearEffect", "depression:d_age:0.02",
+            "--linearEffect", "anxiety:d_age:0.015",
+        ])
+        @test length(cfg_le2.linearEffects) == 2
+
+        # --randomEffect
+        cfg_re = parse_cli_args(["--randomEffect", "depression::uid:norm(0,0.2)"])
+        @test length(cfg_re.randomEffects) == 1
+        @test cfg_re.randomEffects[1].categoricalInputs == ["uid"]
+        @test cfg_re.randomEffects[1].value == Normal(0.0, 0.2)
+
+        # halfnorm in randomEffect
+        cfg_hn = parse_cli_args(["--randomEffect", "depression::uid:halfnorm(0,0.2)"])
+        @test length(cfg_hn.randomEffects) == 1
+        @test cfg_hn.randomEffects[1].value isa UnivariateDistribution
+    end
+
+    @testset "CLI complex model (default-model equivalent)" begin
+        # Demonstrate that a model comparable to the default can be fully described via CLI:
+        # latent variables, multiple linear effects, multiple random effects, and then simulated.
+        args = [
+            "--latentVariables", "depression,anxiety",
+            "--linearEffect", "depression:d_age:0.02",
+            "--linearEffect", "anxiety:d_age:0.015",
+            "--linearEffect", "depression:_sex_fm:0.05",
+            "--linearEffect", "anxiety:_sex_fm:0.05",
+            "--randomEffect", "depression::yearGroup:norm(0,0.05)",
+            "--randomEffect", "anxiety::yearGroup:norm(0,0.05)",
+            "--randomEffect", "depression::uid:halfnorm(0,0.2)",
+            "--randomEffect", "anxiety::uid:halfnorm(0,0.15)",
+            "--randomEffect", "depression:::norm(0,0.1)",
+            "--randomEffect", "anxiety:::norm(0,0.1)",
+            "--nWaves", "2",
+            "--nSchools", "2",
+            "--nYeargroupsPerSchool", "2",
+            "--nClassesPerSchoolYeargroup", "1",
+            "--nStudentsPerClass", "3",
+            "--seed", "77",
+        ]
+        cfg = parse_cli_args(args)
+
+        @test cfg.latentVariables == ["depression", "anxiety"]
+        @test length(cfg.linearEffects) == 4
+        @test length(cfg.randomEffects) == 6
+        @test cfg.nWaves == 2
+
+        # Run the simulation end-to-end
+        data, schema = simulate(cfg)
+        @test data isa DataFrame
+        @test nrow(data) == 2 * 2 * 1 * 3 * 2  # schools × yeargroups × classes × students × waves
+        @test "wave" in names(data)
+        @test "uid" in names(data)
+        @test "phq9_1" in names(data)  # default questionnaires still applied
     end
 
     @testset "column_order" begin

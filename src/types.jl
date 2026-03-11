@@ -50,24 +50,33 @@ struct Range
 end
 
 """
-    CountSpec
+    SamplerSpec
 
-A count specification: either a fixed integer, an inclusive range, a
-`UnivariateDistribution` from `Distributions.jl`, or a callable
-`(rng::AbstractRNG) -> Number` to sample from
-(values are rounded to the nearest integer and clamped to ≥ 1).
+A flexible sampler specification accepted anywhere a random value is needed.
+Can be:
+- A fixed `Int` (always returns that value)
+- A `Range` (samples uniformly from `[min, max]`)
+- A `UnivariateDistribution` from `Distributions.jl` (e.g. `Normal(30, 7)`)
+- A callable `(rng::AbstractRNG) -> Number` (custom sampler)
+
+Used for:
+- Count fields in `SimulationConfig` (values are rounded to the nearest integer and clamped ≥ 1 via `sample_count`)
+- `RandomEffect.value` (drawn as `Float64` via `draw_sampler`)
 
 ## Examples
 
 ```julia
-5                              # fixed count
+5                              # fixed value
 Range(1, 5)                    # uniform sample from [1, 5]
-Normal(30.0, 7.0)              # round(Normal(30, 7)) ≥ 1
-truncated(Normal(30.0, 7.0), 1, Inf)  # truncated to avoid non-positive values
-rng -> rand(rng, Poisson(25))  # custom callable: same interface as distributions
+Normal(30.0, 7.0)              # sample from Normal
+truncated(Normal(0.0, 0.2), 0, Inf)          # half-normal
+rng -> rand(rng) < 0.01 ? rand(rng, Normal(0.75, 0.1)) : 0.0  # custom: MDE
 ```
 """
-const CountSpec = Union{Int,Range,UnivariateDistribution,Function}
+const SamplerSpec = Union{Int,Range,UnivariateDistribution,Function}
+
+# Backward-compatible alias kept for any code that still references CountSpec
+const CountSpec = SamplerSpec
 
 """
     LinearEffect
@@ -96,12 +105,15 @@ and added to the `target` latent variable.
 
 If `categoricalInputs` is empty, a fresh draw is taken on every evaluation,
 modelling residual / error variance.
+
+`value` is a `SamplerSpec`: a `UnivariateDistribution`, a `Function`
+`(rng::AbstractRNG) -> Number`, a fixed `Int`, or a `Range`.
 """
 struct RandomEffect
     target::String
     numericalInputs::Vector{String}    # numeric columns that scale the draw
     categoricalInputs::Vector{String}  # columns that define groups (one draw per group)
-    value::UnivariateDistribution      # distribution to draw from
+    value::SamplerSpec                 # distribution or callable to draw from
 end
 
 """

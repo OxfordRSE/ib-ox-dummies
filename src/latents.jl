@@ -42,7 +42,8 @@ The list captures:
 2. Ethnicity × class × school cluster effect — small intersectional cluster variation.
 3. Individual × wave effect — moderate fluctuation in mental health across waves.
 4. Individual baseline effect — major inter-individual variation (half-normal, always ≥ 0).
-5. Residual / error term — independent noise drawn fresh per observation.
+5. Major depressive episode (MDE) — 1% per-wave probability of a large positive depression spike.
+6. Residual / error term — independent noise drawn fresh per observation.
 """
 function default_random_effects()::Vector{RandomEffect}
     return [
@@ -62,7 +63,11 @@ function default_random_effects()::Vector{RandomEffect}
         RandomEffect("depression", [], ["uid"], truncated(Normal(0.0, 0.2), 0.0, Inf)),
         RandomEffect("anxiety",    [], ["uid"], truncated(Normal(0.0, 0.15), 0.0, Inf)),
 
-        # 5. Residual error (fresh draw per observation)
+        # 5. Major depressive episode: 1% per-individual-wave probability of a large spike
+        RandomEffect("depression", [], ["uid", "wave"],
+            rng -> rand(rng) < 0.01 ? rand(rng, Normal(0.75, 0.1)) : 0.0),
+
+        # 6. Residual error (fresh draw per observation)
         RandomEffect("depression", [], [], Normal(0.0, 0.1)),
         RandomEffect("anxiety",    [], [], Normal(0.0, 0.1)),
     ]
@@ -106,7 +111,7 @@ function precompute_effect_draws(
                 for row in rows
             )
             draws[i] = Dict{Any,Float64}(
-                grp => rand(rng, eff.value) for grp in group_vals
+                grp => draw_sampler(rng, eff.value) for grp in group_vals
             )
         end
     end
@@ -155,7 +160,7 @@ function compute_row_latents(
         eff.target ∈ latent_names || continue
 
         draw = if isempty(eff.categoricalInputs)
-            rand(rng, eff.value)  # fresh residual draw
+            draw_sampler(rng, eff.value)  # fresh residual draw
         else
             grp_key = Tuple(get(row, col, missing) for col in eff.categoricalInputs)
             get(effect_draws[i], grp_key, 0.0)

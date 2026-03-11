@@ -72,14 +72,14 @@ end
 """
     sample_count(rng, spec) -> Int
 
-Sample a positive integer count from a `CountSpec`.
+Sample a positive integer count from a `SamplerSpec`.
 - `Int`: return the value directly (must be ≥ 1).
 - `Range`: sample uniformly from [min, max].
 - `UnivariateDistribution`: draw a sample, round to nearest integer, clamp to ≥ 1.
 - `Function`: call `spec(rng)` where `spec` has signature `(rng::AbstractRNG) -> Number`,
   round to nearest integer, clamp to ≥ 1.
 """
-function sample_count(rng::AbstractRNG, spec::CountSpec)::Int
+function sample_count(rng::AbstractRNG, spec::SamplerSpec)::Int
     if spec isa Int
         spec >= 1 || throw(ArgumentError("Count must be ≥ 1, got $spec"))
         return spec
@@ -89,6 +89,27 @@ function sample_count(rng::AbstractRNG, spec::CountSpec)::Int
         return max(1, round(Int, spec(rng)))
     else  # UnivariateDistribution
         return max(1, round(Int, rand(rng, spec)))
+    end
+end
+
+"""
+    draw_sampler(rng, spec) -> Float64
+
+Draw a `Float64` sample from a `SamplerSpec`.
+- `Int`: return as `Float64` (fixed value).
+- `Range`: sample uniformly from [min, max] and return as `Float64`.
+- `UnivariateDistribution`: draw a sample via `rand(rng, spec)`.
+- `Function`: call `spec(rng)` where `spec` has signature `(rng::AbstractRNG) -> Number`.
+"""
+function draw_sampler(rng::AbstractRNG, spec::SamplerSpec)::Float64
+    if spec isa Int
+        return Float64(spec)
+    elseif spec isa Range
+        return Float64(rand(rng, spec.min:spec.max))
+    elseif spec isa Function
+        return Float64(spec(rng))
+    else  # UnivariateDistribution
+        return Float64(rand(rng, spec))
     end
 end
 
