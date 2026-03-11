@@ -47,3 +47,9 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+# Julia compiled artefacts and caches
+*.jl.cov
+*.jl.*.cov
+*.jl.mem
+/deps/deps.jl
