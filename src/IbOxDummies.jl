@@ -46,6 +46,10 @@ data, schema = simulate(SimulationConfig(
 The package provides an `ib_ox_dummies` executable.  Run it with:
 
     ib_ox_dummies --help
+
+Use `--config examples/default_model.toml` to specify questionnaires, latent variable
+loadings, effects, and demographics from a TOML file (see `examples/default_model.toml`).
+CLI arguments override any TOML values.
 """
 module IbOxDummies
 
@@ -58,6 +62,7 @@ using CSV
 using JSON3
 using ArgParse
 using Faker
+import TOML
 
 include("types.jl")
 include("demographics.jl")
@@ -123,6 +128,10 @@ export
     parse_sampler_spec,
     parse_linear_effect,
     parse_random_effect,
-    parse_demographics_weights
+    parse_demographics_weights,
+    parse_questionnaire_spec_from_dict,
+    parse_linear_effect_from_dict,
+    parse_random_effect_from_dict,
+    load_toml_config
 
 end

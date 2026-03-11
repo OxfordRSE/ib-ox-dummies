@@ -54,7 +54,8 @@ end
 
 A flexible sampler specification accepted anywhere a random value is needed.
 Can be:
-- A fixed `Int` (always returns that value)
+- A fixed `Int` (always returns that integer value)
+- A fixed `Float64` (always returns that float value; useful for `RandomEffect.value`)
 - A `Range` (samples uniformly from `[min, max]`)
 - A `UnivariateDistribution` from `Distributions.jl` (e.g. `Normal(30, 7)`)
 - A callable `(rng::AbstractRNG) -> Number` (custom sampler)
@@ -66,14 +67,15 @@ Used for:
 ## Examples
 
 ```julia
-5                              # fixed value
+5                              # fixed integer
+0.5                            # fixed float (for RandomEffect.value)
 Range(1, 5)                    # uniform sample from [1, 5]
 Normal(30.0, 7.0)              # sample from Normal
 truncated(Normal(0.0, 0.2), 0, Inf)          # half-normal
 rng -> rand(rng) < 0.01 ? rand(rng, Normal(0.75, 0.1)) : 0.0  # custom: MDE
 ```
 """
-const SamplerSpec = Union{Int,Range,UnivariateDistribution,Function}
+const SamplerSpec = Union{Int,Float64,Range,UnivariateDistribution,Function}
 
 
 """

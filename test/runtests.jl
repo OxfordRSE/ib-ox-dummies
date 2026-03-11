@@ -120,6 +120,10 @@ using IbOxDummies
         @test draw_sampler(rng, 5) === 5.0
         @test draw_sampler(rng, 0) === 0.0
 
+        # Fixed Float64 → exact value
+        @test draw_sampler(rng, 0.75) === 0.75
+        @test draw_sampler(rng, -1.5) === -1.5
+
         # Range → value within range
         rng = MersenneTwister(42)
         for _ in 1:20
@@ -757,6 +761,162 @@ using IbOxDummies
         @test "wave" in names(data)
         @test "uid" in names(data)
         @test "phq9_1" in names(data)  # default questionnaires still applied
+    end
+
+    @testset "TOML config parsing helpers" begin
+        # parse_questionnaire_spec_from_dict
+        d_phq = Dict(
+            "name"      => "PHQ_9",
+            "prefix"    => "phq9",
+            "nItems"    => 9,
+            "nLevels"   => 4,
+            "noiseSD"   => 0.6,
+            "spoilRate" => 0.01,
+            "loadings"  => [Dict("latentName" => "depression", "scale" => 2.5)],
+        )
+        qs = parse_questionnaire_spec_from_dict(d_phq)
+        @test qs.name == "PHQ_9"
+        @test qs.prefix == "phq9"
+        @test qs.nItems == 9
+        @test qs.nLevels == 4
+        @test qs.noiseSD ≈ 0.6
+        @test qs.spoilRate ≈ 0.01
+        @test length(qs.loadings) == 1
+        @test qs.loadings[1].latentName == "depression"
+        @test qs.loadings[1].scale ≈ 2.5
+
+        # Defaults when optional fields omitted
+        d_minimal = Dict("name" => "MyQ", "nItems" => 5)
+        qs2 = parse_questionnaire_spec_from_dict(d_minimal)
+        @test qs2.nLevels == 4
+        @test qs2.noiseSD ≈ 0.6
+        @test qs2.spoilRate ≈ 0.01
+        @test isempty(qs2.loadings)
+        @test qs2.prefix == "myq"  # lowercased, underscores removed
+
+        # parse_linear_effect_from_dict
+        d_le = Dict("target" => "depression", "inputs" => ["d_age", "_sex_fm"], "value" => 0.005)
+        le = parse_linear_effect_from_dict(d_le)
+        @test le.target == "depression"
+        @test le.inputs == ["d_age", "_sex_fm"]
+        @test le.value ≈ 0.005
+
+        # inputs defaults to empty
+        d_le2 = Dict("target" => "anxiety", "value" => 0.1)
+        le2 = parse_linear_effect_from_dict(d_le2)
+        @test isempty(le2.inputs)
+
+        # parse_random_effect_from_dict — distribution value string
+        d_re = Dict(
+            "target"            => "depression",
+            "numericalInputs"   => String[],
+            "categoricalInputs" => ["uid"],
+            "value"             => "norm(0,0.2)",
+        )
+        re = parse_random_effect_from_dict(d_re)
+        @test re.target == "depression"
+        @test isempty(re.numericalInputs)
+        @test re.categoricalInputs == ["uid"]
+        @test re.value == Normal(0.0, 0.2)
+
+        # parse_random_effect_from_dict — halfnorm
+        d_re2 = Dict(
+            "target" => "anxiety",
+            "value"  => "halfnorm(0,0.15)",
+        )
+        re2 = parse_random_effect_from_dict(d_re2)
+        @test re2.value isa UnivariateDistribution
+        @test isempty(re2.categoricalInputs)
+
+        # parse_random_effect_from_dict — numeric value
+        d_re3 = Dict("target" => "depression", "value" => 0.5)
+        re3 = parse_random_effect_from_dict(d_re3)
+        @test re3.value isa Float64
+        @test re3.value ≈ 0.5
+    end
+
+    @testset "load_toml_config" begin
+        # load_toml_config errors on missing file
+        @test_throws ArgumentError load_toml_config("/nonexistent/path/config.toml")
+
+        # load the bundled example and verify its top-level structure
+        example_path = joinpath(@__DIR__, "..", "examples", "default_model.toml")
+        toml = load_toml_config(example_path)
+        @test haskey(toml, "simulation")
+        @test haskey(toml, "demographics")
+        @test haskey(toml, "linearEffect")
+        @test haskey(toml, "randomEffect")
+        @test haskey(toml, "questionnaire")
+
+        sim = toml["simulation"]
+        @test sim["nWaves"] == 3
+        @test sim["nSchools"] == 10
+        @test sim["latentVariables"] == ["depression", "anxiety"]
+
+        @test length(toml["linearEffect"]) == 6
+        @test length(toml["randomEffect"]) == 10
+        @test length(toml["questionnaire"]) == 2
+    end
+
+    @testset "parse_cli_args with --config" begin
+        example_path = joinpath(@__DIR__, "..", "examples", "default_model.toml")
+
+        # --config alone: all settings come from TOML
+        cfg = parse_cli_args(["--config", example_path])
+        @test cfg.nWaves == 3
+        @test cfg.nSchools == 10
+        @test cfg.latentVariables == ["depression", "anxiety"]
+        @test length(cfg.linearEffects) == 6
+        @test length(cfg.randomEffects) == 10
+        @test length(cfg.questionnaires) == 2
+        @test cfg.questionnaires[1].name == "PHQ_9"
+        @test cfg.questionnaires[2].name == "GAD_7"
+        @test length(cfg.questionnaires[1].loadings) == 1
+        @test cfg.questionnaires[1].loadings[1].latentName == "depression"
+        @test !isnothing(cfg.demographicsSpec)
+        @test !isempty(cfg.demographicsSpec.sex)
+
+        # CLI args override TOML: --nWaves 5 overrides nWaves=3 from TOML
+        cfg_override = parse_cli_args(["--config", example_path, "--nWaves", "5"])
+        @test cfg_override.nWaves == 5
+        @test cfg_override.nSchools == 10  # still from TOML
+
+        # CLI --seed overrides (TOML example has no seed)
+        cfg_seed = parse_cli_args(["--config", example_path, "--seed", "99"])
+        @test cfg_seed.seed == 99
+
+        # CLI --linearEffect replaces all TOML linearEffects
+        cfg_le = parse_cli_args([
+            "--config", example_path,
+            "--linearEffect", "depression:d_age:0.03",
+        ])
+        @test length(cfg_le.linearEffects) == 1
+        @test cfg_le.linearEffects[1].value ≈ 0.03
+
+        # CLI --sex overrides TOML demographics.sex
+        cfg_sex = parse_cli_args([
+            "--config", example_path,
+            "--sex", "M:0.60,F:0.40",
+        ])
+        @test !isnothing(cfg_sex.demographicsSpec)
+        @test length(cfg_sex.demographicsSpec.sex) == 2
+        @test ("M", 0.60) in cfg_sex.demographicsSpec.sex
+
+        # End-to-end: simulate using the example TOML config (small run)
+        cfg_run = parse_cli_args([
+            "--config", example_path,
+            "--nWaves", "2",
+            "--nSchools", "2",
+            "--nYeargroupsPerSchool", "2",
+            "--nClassesPerSchoolYeargroup", "1",
+            "--nStudentsPerClass", "3",
+            "--seed", "88",
+        ])
+        data, schema = simulate(cfg_run)
+        @test data isa DataFrame
+        @test nrow(data) == 2 * 2 * 1 * 3 * 2  # schools × yeargroups × classes × students × waves
+        @test "phq9_1" in names(data)
+        @test "gad7_1" in names(data)
     end
 
     @testset "column_order" begin

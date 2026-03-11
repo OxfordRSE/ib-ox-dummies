@@ -80,7 +80,8 @@ ib_ox_dummies --help
 ## Usage
 
 ```
-usage: ib_ox_dummies [--nWaves NWAVES] [--nSchools NSCHOOLS]
+usage: ib_ox_dummies [--config CONFIG]
+                     [--nWaves NWAVES] [--nSchools NSCHOOLS]
                      [--nYeargroupsPerSchool SPEC]
                      [--nClassesPerSchoolYeargroup SPEC]
                      [--nStudentsPerClass SPEC]
@@ -92,6 +93,9 @@ usage: ib_ox_dummies [--nWaves NWAVES] [--nSchools NSCHOOLS]
                      [--version] [-h]
 
 Generate mock longitudinal questionnaire data for schoolchildren.
+
+Use --config to load a TOML file specifying the full model (questionnaires,
+latent variable loadings, effects, demographics). CLI arguments override TOML values.
 
 SPEC formats: integer ('5'), range ('1:5'), norm(μ,σ), halfnorm(μ,σ),
 poisson(λ), negbinom(r,p), lognorm(μ,σ), uniform(a,b), exponential(rate),
@@ -107,24 +111,65 @@ Demographics weight format: "Category1:weight1,Category2:weight2,..."
   e.g. "M:0.49,F:0.49,I:0.02"  or  "White British:0.75,Asian:0.15,Other:0.10"
 
 optional arguments:
+  --config CONFIG                          Path to TOML configuration file; CLI args override
   --nWaves NWAVES                          Number of waves (type: Int, default: 3)
   --nSchools NSCHOOLS                      Number of schools (type: Int, default: 10)
   --nYeargroupsPerSchool SPEC              Yeargroups per school (default: "5")
   --nClassesPerSchoolYeargroup SPEC        Classes per yeargroup (default: "1:5")
   --nStudentsPerClass SPEC                 Students per class (default: "norm(30,7)")
   --latentVariables VARS                   Comma-separated latent names (default: "depression,anxiety")
-  --linearEffect EFFECT                    Add a LinearEffect (repeatable; replaces defaults)
-  --randomEffect EFFECT                    Add a RandomEffect (repeatable; replaces defaults)
-  --ethnicity WEIGHTS                      Ethnicity distribution (default: UK 2021 Census)
-  --sex WEIGHTS                            Sex distribution (default: UK 2021 Census)
-  --genderIdentity WEIGHTS                 Gender identity distribution (default: UK 2021 Census)
-  --sexualOrientation WEIGHTS              Sexual orientation distribution (default: UK 2021 Census)
-  --seed SEED                              Random seed (type: Int)
+  --linearEffect EFFECT                    Add a LinearEffect (repeatable; replaces TOML/defaults)
+  --randomEffect EFFECT                    Add a RandomEffect (repeatable; replaces TOML/defaults)
+  --ethnicity WEIGHTS                      Ethnicity distribution (overrides TOML/UK 2021 Census)
+  --sex WEIGHTS                            Sex distribution (overrides TOML/UK 2021 Census)
+  --genderIdentity WEIGHTS                 Gender identity distribution (overrides TOML/UK 2021 Census)
+  --sexualOrientation WEIGHTS              Sexual orientation distribution (overrides TOML/UK 2021 Census)
+  --seed SEED                              Random seed (type: Int; overrides TOML)
   --output OUTPUT                          Output format: csv | json | schema (default: "csv")
   --schema                                 Print JSON Schema and exit
   --version                                Show version and exit
   -h, --help                               Show this help message and exit
 ```
+
+### TOML configuration file
+
+The `--config` flag accepts a TOML file that can specify the complete model — questionnaires,
+latent variable loadings, linear/random effects, and demographics — all in one place.
+Any CLI argument overrides the corresponding TOML value.
+
+```toml
+# examples/default_model.toml — abbreviated excerpt
+[simulation]
+nWaves   = 3
+nSchools = 10
+nStudentsPerClass = "norm(30,7)"
+latentVariables   = ["depression", "anxiety"]
+
+[demographics]
+sex       = "M:0.490,F:0.490,I:0.020"
+ethnicity = "White British:0.812,Asian:0.083,Black:0.040,Mixed:0.030,Other:0.035"
+
+[[linearEffect]]
+target = "depression"
+inputs = ["d_age"]
+value  = 0.02
+
+[[randomEffect]]
+target            = "depression"
+categoricalInputs = ["uid"]
+value             = "halfnorm(0,0.2)"
+
+[[questionnaire]]
+name     = "PHQ_9"
+prefix   = "phq9"
+nItems   = 9
+nLevels  = 4
+noiseSD  = 0.6
+spoilRate = 0.01
+loadings = [{latentName = "depression", scale = 2.5}]
+```
+
+See [`examples/default_model.toml`](examples/default_model.toml) for the full default model expressed as TOML.
 
 ### Examples
 
@@ -137,6 +182,12 @@ ib_ox_dummies --nWaves 2 --nSchools 3 --seed 42
 
 # JSON output with Poisson-distributed class sizes
 ib_ox_dummies --nStudentsPerClass poisson(25) --output json
+
+# Full model from TOML config file (see examples/default_model.toml)
+ib_ox_dummies --config examples/default_model.toml
+
+# TOML config with CLI override: use TOML model but change wave count and seed
+ib_ox_dummies --config examples/default_model.toml --nWaves 5 --seed 42
 
 # Custom demographics: equal sex split, simplified ethnicity distribution
 ib_ox_dummies \

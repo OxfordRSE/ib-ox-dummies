@@ -1,0 +1,190 @@
+# IbOxDummies configuration file — default model equivalent
+#
+# This file specifies a model that is equivalent in complexity and design to the
+# built-in defaults used when no configuration is provided, with the exception of
+# the "major depressive episode" random effect (which requires a custom Julia
+# function and cannot be expressed in TOML; use the Julia API for that).
+#
+# Run with:
+#   ib_ox_dummies --config examples/default_model.toml
+#
+# Override individual settings from the command line, e.g.:
+#   ib_ox_dummies --config examples/default_model.toml --nWaves 5 --seed 42
+#
+# CLI arguments take precedence over TOML values.
+
+# ---------------------------------------------------------------------------
+# Simulation parameters
+# ---------------------------------------------------------------------------
+
+[simulation]
+nWaves                     = 3
+nSchools                   = 10
+nYeargroupsPerSchool       = "5"         # fixed integer
+nClassesPerSchoolYeargroup = "1:5"       # uniform sample from [1, 5]
+nStudentsPerClass          = "norm(30,7)" # Normal distribution
+latentVariables            = ["depression", "anxiety"]
+# seed = 42                              # uncomment for reproducible output
+
+# ---------------------------------------------------------------------------
+# Demographics  (UK 2021 Census-derived proportions)
+# ---------------------------------------------------------------------------
+
+[demographics]
+ethnicity         = "White British:0.812,Asian:0.083,Black:0.040,Mixed:0.030,Other:0.035"
+sex               = "M:0.490,F:0.490,I:0.020"
+genderIdentity    = "Cisgender:0.940,Transgender:0.020,Non-binary:0.030,Other:0.010"
+sexualOrientation = "Heterosexual:0.940,Bisexual:0.030,Gay or lesbian:0.020,Other:0.010"
+
+# ---------------------------------------------------------------------------
+# Linear effects
+#
+# Each entry contributes:  value × ∏(inputs)  to the target latent variable.
+# 'inputs' is a list of numeric column names.  An empty list gives an intercept.
+# ---------------------------------------------------------------------------
+
+# Moderate positive age effect (older students report worse mental health on average)
+[[linearEffect]]
+target = "depression"
+inputs = ["d_age"]
+value  = 0.02
+
+[[linearEffect]]
+target = "anxiety"
+inputs = ["d_age"]
+value  = 0.015
+
+# Small sex effect (female > male; _sex_fm is effect-coded: F=1, M=-1, other=0)
+[[linearEffect]]
+target = "depression"
+inputs = ["_sex_fm"]
+value  = 0.05
+
+[[linearEffect]]
+target = "anxiety"
+inputs = ["_sex_fm"]
+value  = 0.05
+
+# Small age × sex interaction (female disadvantage grows with age)
+[[linearEffect]]
+target = "depression"
+inputs = ["d_age", "_sex_fm"]
+value  = 0.005
+
+[[linearEffect]]
+target = "anxiety"
+inputs = ["d_age", "_sex_fm"]
+value  = 0.004
+
+# ---------------------------------------------------------------------------
+# Random effects
+#
+# Each entry draws one value per unique combination of categoricalInputs.
+# An empty categoricalInputs means a fresh draw per observation (residual error).
+# 'value' is a SamplerSpec string: norm(μ,σ), halfnorm(μ,σ), poisson(λ), etc.
+# ---------------------------------------------------------------------------
+
+# Cohort (yearGroup) cluster effects — small shared experience per school year
+[[randomEffect]]
+target            = "depression"
+numericalInputs   = []
+categoricalInputs = ["yearGroup"]
+value             = "norm(0,0.05)"
+
+[[randomEffect]]
+target            = "anxiety"
+numericalInputs   = []
+categoricalInputs = ["yearGroup"]
+value             = "norm(0,0.05)"
+
+# Ethnicity × class × school cluster effects — small intersectional cluster variation
+[[randomEffect]]
+target            = "depression"
+numericalInputs   = []
+categoricalInputs = ["d_ethnicity", "class", "_school_id"]
+value             = "norm(0,0.03)"
+
+[[randomEffect]]
+target            = "anxiety"
+numericalInputs   = []
+categoricalInputs = ["d_ethnicity", "class", "_school_id"]
+value             = "norm(0,0.03)"
+
+# Individual × wave effects — moderate fluctuation over time
+[[randomEffect]]
+target            = "depression"
+numericalInputs   = []
+categoricalInputs = ["uid", "wave"]
+value             = "norm(0,0.15)"
+
+[[randomEffect]]
+target            = "anxiety"
+numericalInputs   = []
+categoricalInputs = ["uid", "wave"]
+value             = "norm(0,0.12)"
+
+# Individual baseline effects — major inter-individual variation (always >= 0)
+[[randomEffect]]
+target            = "depression"
+numericalInputs   = []
+categoricalInputs = ["uid"]
+value             = "halfnorm(0,0.2)"
+
+[[randomEffect]]
+target            = "anxiety"
+numericalInputs   = []
+categoricalInputs = ["uid"]
+value             = "halfnorm(0,0.15)"
+
+# Note: The default model also includes a "major depressive episode" (MDE) random
+# effect with a custom function:
+#
+#   RandomEffect("depression", [], ["uid", "wave"],
+#       rng -> rand(rng) < 0.01 ? rand(rng, Normal(0.75, 0.1)) : 0.0)
+#
+# This cannot be expressed in TOML because it requires a custom Julia function.
+# Use the Julia API directly (or omit it here and accept the approximation).
+
+# Residual error terms — independent noise drawn fresh per observation
+[[randomEffect]]
+target            = "depression"
+numericalInputs   = []
+categoricalInputs = []
+value             = "norm(0,0.1)"
+
+[[randomEffect]]
+target            = "anxiety"
+numericalInputs   = []
+categoricalInputs = []
+value             = "norm(0,0.1)"
+
+# ---------------------------------------------------------------------------
+# Questionnaires
+#
+# 'loadings' maps latent variable names to scale factors for each item's mean.
+# The item mean = clamp(Σ loading.scale × latent_value, 0, nLevels-1), then
+# noise is added from a truncated Normal and the result is rounded and clamped.
+# ---------------------------------------------------------------------------
+
+# PHQ-9: Patient Health Questionnaire — 9 items, 0–3 scale, measures depression
+[[questionnaire]]
+name      = "PHQ_9"
+prefix    = "phq9"
+nItems    = 9
+nLevels   = 4
+noiseSD   = 0.6
+spoilRate = 0.01
+loadings  = [{latentName = "depression", scale = 2.5}]
+
+# GAD-7: Generalised Anxiety Disorder — 7 items, 0–3 scale, measures anxiety
+[[questionnaire]]
+name      = "GAD_7"
+prefix    = "gad7"
+nItems    = 7
+nLevels   = 4
+noiseSD   = 0.6
+spoilRate = 0.01
+loadings  = [
+    {latentName = "anxiety",    scale = 2.5},
+    {latentName = "depression", scale = 0.8},
+]

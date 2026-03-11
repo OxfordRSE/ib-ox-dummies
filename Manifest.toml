@@ -2,7 +2,7 @@
 
 julia_version = "1.12.5"
 manifest_format = "2.0"
-project_hash = "13db4ce1a8461811661fe4d17c8b7cb0047bea70"
+project_hash = "d1a81232e080fdde620fab6f4ddad7e27c5f5040"
 
 [[deps.AliasTables]]
 deps = ["PtrArrays", "Random"]
@@ -154,7 +154,7 @@ uuid = "34004b35-14d8-5ef3-9330-4cdb6864b03a"
 version = "0.3.28"
 
 [[deps.IbOxDummies]]
-deps = ["ArgParse", "CSV", "DataFrames", "Distributions", "JSON3", "Random", "StatsBase", "Tables"]
+deps = ["ArgParse", "CSV", "DataFrames", "Distributions", "Faker", "JSON3", "Random", "StatsBase", "TOML", "Tables"]
 path = "."
 uuid = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 version = "0.1.0"

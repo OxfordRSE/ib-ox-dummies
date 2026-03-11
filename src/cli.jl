@@ -186,13 +186,171 @@ function parse_random_effect(s::AbstractString)::RandomEffect
 end
 
 """
+    parse_questionnaire_spec_from_dict(d) -> QuestionnaireSpec
+
+Parse a `QuestionnaireSpec` from a Dict (e.g. from a TOML `[[questionnaire]]` table).
+
+Required keys:
+- `name`: questionnaire name, e.g. `"PHQ_9"`
+- `nItems`: number of items
+
+Optional keys (with defaults):
+- `prefix`: column prefix (default: `name` with underscores and spaces removed and lowercased)
+- `nLevels`: Likert levels per item (default: `4`)
+- `noiseSD`: item-level noise standard deviation (default: `0.6`)
+- `spoilRate`: fraction of responses that are random/spoiled (default: `0.01`)
+- `loadings`: array of `{latentName, scale}` tables (default: `[]`)
+
+## TOML example
+
+```toml
+[[questionnaire]]
+name     = "PHQ_9"
+prefix   = "phq9"
+nItems   = 9
+nLevels  = 4
+noiseSD  = 0.6
+spoilRate = 0.01
+loadings = [{latentName = "depression", scale = 2.5}]
+```
+"""
+function parse_questionnaire_spec_from_dict(d::AbstractDict)::QuestionnaireSpec
+    name      = d["name"]
+    prefix    = get(d, "prefix", lowercase(replace(name, r"[_ ]+" => "")))
+    nItems    = d["nItems"]
+    nLevels   = Int(get(d, "nLevels", 4))
+    noiseSD   = Float64(get(d, "noiseSD", 0.6))
+    spoilRate = Float64(get(d, "spoilRate", 0.01))
+    loadings  = LatentLoading[
+        LatentLoading(string(l["latentName"]), Float64(l["scale"]))
+        for l in get(d, "loadings", [])
+    ]
+    return QuestionnaireSpec(name, prefix, nItems, nLevels, loadings, noiseSD, spoilRate)
+end
+
+"""
+    parse_linear_effect_from_dict(d) -> LinearEffect
+
+Parse a `LinearEffect` from a Dict (e.g. from a TOML `[[linearEffect]]` table).
+
+Required keys:
+- `target`: name of the latent variable
+- `value`: float coefficient
+
+Optional keys:
+- `inputs`: array of numeric column names (default: `[]`)
+
+## TOML example
+
+```toml
+[[linearEffect]]
+target = "depression"
+inputs = ["d_age", "_sex_fm"]
+value  = 0.005
+```
+"""
+function parse_linear_effect_from_dict(d::AbstractDict)::LinearEffect
+    target = string(d["target"])
+    inputs = String[string(s) for s in get(d, "inputs", String[])]
+    value  = Float64(d["value"])
+    return LinearEffect(target, inputs, value)
+end
+
+"""
+    parse_random_effect_from_dict(d) -> RandomEffect
+
+Parse a `RandomEffect` from a Dict (e.g. from a TOML `[[randomEffect]]` table).
+
+Required keys:
+- `target`: name of the latent variable
+- `value`: a `SamplerSpec` string (e.g. `"norm(0,0.1)"`) or a number
+
+Optional keys:
+- `numericalInputs`: array of numeric column names that scale the draw (default: `[]`)
+- `categoricalInputs`: array of column names defining groups (default: `[]`)
+
+## TOML example
+
+```toml
+[[randomEffect]]
+target           = "depression"
+numericalInputs  = []
+categoricalInputs = ["uid", "wave"]
+value            = "norm(0,0.15)"
+```
+"""
+function parse_random_effect_from_dict(d::AbstractDict)::RandomEffect
+    target     = string(d["target"])
+    num_inputs = String[string(s) for s in get(d, "numericalInputs", String[])]
+    cat_inputs = String[string(s) for s in get(d, "categoricalInputs", String[])]
+    value_raw  = d["value"]
+    value      = value_raw isa Number ? Float64(value_raw) : parse_sampler_spec(string(value_raw))
+    return RandomEffect(target, num_inputs, cat_inputs, value)
+end
+
+"""
+    load_toml_config(path) -> Dict{String,Any}
+
+Load a TOML configuration file and return its contents as a nested `Dict`.
+
+The following top-level sections are recognised by `parse_cli_args`:
+
+- `[simulation]` — scalar simulation parameters:
+  `nWaves`, `nSchools`, `nYeargroupsPerSchool`, `nClassesPerSchoolYeargroup`,
+  `nStudentsPerClass`, `latentVariables` (array of strings), `seed`
+- `[demographics]` — demographic weight strings:
+  `ethnicity`, `sex`, `genderIdentity`, `sexualOrientation`
+  (each formatted as `"Category1:weight1,Category2:weight2,..."}`)
+- `[[linearEffect]]` — array of linear effect tables
+  (see `parse_linear_effect_from_dict`)
+- `[[randomEffect]]` — array of random effect tables
+  (see `parse_random_effect_from_dict`)
+- `[[questionnaire]]` — array of questionnaire specification tables
+  (see `parse_questionnaire_spec_from_dict`)
+
+CLI arguments override values in the TOML file. See `parse_cli_args` for details.
+"""
+function load_toml_config(path::AbstractString)::Dict{String,Any}
+    isfile(path) || throw(ArgumentError("Config file not found: \"$path\""))
+    return TOML.parsefile(path)
+end
+
+"""
     parse_cli_args(args) -> SimulationConfig
 
 Parse command-line arguments using `ArgParse.jl` and return a `SimulationConfig`.
+
+All optional arguments default to `nothing`; explicitly provided CLI values override
+any values found in a `--config` TOML file, which in turn override built-in defaults.
+
+## Precedence (highest to lowest)
+
+1. Explicit CLI argument
+2. `--config` TOML file value
+3. Built-in default
+
+## TOML config file
+
+Use `--config path/to/config.toml` to load base settings from a TOML file.  See
+`load_toml_config` and `examples/default_model.toml` for the full supported schema.
+The TOML file is the primary way to specify questionnaires and latent variable loadings,
+which have no equivalent CLI-only representation.
+
+## Format references
+
+- **SPEC** (for count args): integer `'5'`, range `'1:5'`, or distribution
+  `'norm(30,7)'`, `'halfnorm(0,0.2)'`, `'poisson(10)'`, `'negbinom(5,0.5)'`,
+  `'lognorm(3,0.5)'`, `'uniform(1,10)'`, `'exponential(0.1)'`, `'gamma(2,3)'`
+- **LinearEffect**: `"target:inputs:value"` e.g. `'depression:d_age:0.02'`
+- **RandomEffect**: `"target:numInputs:catInputs:spec"` e.g. `'depression::uid,wave:norm(0,0.15)'`
+- **Demographics**: `"Category1:weight1,Category2:weight2,..."` e.g. `'M:0.49,F:0.49,I:0.02'`
 """
 function parse_cli_args(args::Vector{String})::SimulationConfig
     s = ArgParseSettings(
         description = "Generate mock longitudinal questionnaire data for schoolchildren.\n\n" *
+                      "Use --config to load a TOML file specifying the full model " *
+                      "(questionnaires, latent variable loadings, effects, demographics).\n" *
+                      "CLI arguments override TOML values.\n\n" *
                       "SPEC formats: integer (e.g. '5'), inclusive range (e.g. '1:5'), " *
                       "or a distribution (e.g. 'norm(30,7)', 'halfnorm(0,0.2)', 'poisson(10)', " *
                       "'negbinom(5,0.5)', 'lognorm(3,0.5)', 'uniform(1,10)', 'exponential(0.1)', " *
@@ -210,55 +368,59 @@ function parse_cli_args(args::Vector{String})::SimulationConfig
     )
 
     @add_arg_table! s begin
+        "--config"
+            help     = "Path to a TOML configuration file. CLI arguments override TOML values. " *
+                       "See examples/default_model.toml for the full supported schema."
+            default  = nothing
         "--nWaves"
             help     = "Number of data-collection waves"
             arg_type = Int
-            default  = 3
+            default  = nothing
         "--nSchools"
             help     = "Number of schools"
             arg_type = Int
-            default  = 10
+            default  = nothing
         "--nYeargroupsPerSchool"
             help     = "Yeargroups per school (SPEC)"
-            default  = "5"
+            default  = nothing
         "--nClassesPerSchoolYeargroup"
             help     = "Classes per school yeargroup (SPEC)"
-            default  = "1:5"
+            default  = nothing
         "--nStudentsPerClass"
             help     = "Students per class (SPEC)"
-            default  = "norm(30,7)"
+            default  = nothing
         "--latentVariables"
             help     = "Comma-separated latent variable names (e.g. 'depression,anxiety'). " *
-                       "Empty string uses the default latent variables."
-            default  = ""
+                       "Overrides the TOML [simulation] latentVariables field."
+            default  = nothing
         "--linearEffect"
             help     = "LinearEffect spec: 'target:inputs:value' (repeatable). " *
-                       "Providing any --linearEffect disables the default linear effects."
+                       "If any --linearEffect is given, all TOML linearEffects are replaced."
             action   = :append_arg
-            default  = String[]
+            default  = nothing
         "--randomEffect"
             help     = "RandomEffect spec: 'target:numInputs:catInputs:spec' (repeatable). " *
-                       "Providing any --randomEffect disables the default random effects."
+                       "If any --randomEffect is given, all TOML randomEffects are replaced."
             action   = :append_arg
-            default  = String[]
+            default  = nothing
         "--ethnicity"
             help     = "Ethnicity weight distribution: 'Category1:weight1,Category2:weight2,...'. " *
-                       "Empty string uses UK 2021 Census defaults."
-            default  = ""
+                       "Overrides the TOML [demographics] ethnicity field."
+            default  = nothing
         "--sex"
             help     = "Sex weight distribution: 'M:weight,F:weight,I:weight'. " *
-                       "Empty string uses UK 2021 Census defaults."
-            default  = ""
+                       "Overrides the TOML [demographics] sex field."
+            default  = nothing
         "--genderIdentity"
             help     = "Gender identity weight distribution: 'Category1:weight1,...'. " *
-                       "Empty string uses UK 2021 Census defaults."
-            default  = ""
+                       "Overrides the TOML [demographics] genderIdentity field."
+            default  = nothing
         "--sexualOrientation"
             help     = "Sexual orientation weight distribution: 'Category1:weight1,...'. " *
-                       "Empty string uses UK 2021 Census defaults."
-            default  = ""
+                       "Overrides the TOML [demographics] sexualOrientation field."
+            default  = nothing
         "--seed"
-            help     = "Random seed for reproducibility"
+            help     = "Random seed for reproducibility. Overrides the TOML [simulation] seed field."
             arg_type = Int
             default  = nothing
         "--output"
@@ -270,21 +432,67 @@ function parse_cli_args(args::Vector{String})::SimulationConfig
     end
 
     parsed = parse_args(args, s)
-    output = parsed["schema"] ? "schema" : parsed["output"]
 
-    latent_str   = strip(parsed["latentVariables"])
-    latent_vars  = isempty(latent_str) ? String[] : filter(!isempty, strip.(split(latent_str, ',')))
-    le_raw       = something(parsed["linearEffect"], String[])
-    re_raw       = something(parsed["randomEffect"], String[])
-    linear_effs  = LinearEffect[parse_linear_effect(string(e)) for e in le_raw]
-    random_effs  = RandomEffect[parse_random_effect(string(e)) for e in re_raw]
+    # Load TOML config file if --config was provided
+    toml     = isnothing(parsed["config"]) ? Dict{String,Any}() : load_toml_config(parsed["config"])
+    sim_toml = get(toml, "simulation", Dict{String,Any}())
+    dem_toml = get(toml, "demographics", Dict{String,Any}())
 
-    eth_wts  = parse_demographics_weights(parsed["ethnicity"])
-    sex_wts  = parse_demographics_weights(parsed["sex"])
-    gend_wts = parse_demographics_weights(parsed["genderIdentity"])
-    ori_wts  = parse_demographics_weights(parsed["sexualOrientation"])
+    # --- Scalar simulation parameters: CLI > TOML > built-in default ---
+    nWaves   = something(parsed["nWaves"],   get(sim_toml, "nWaves",   nothing), 3)
+    nSchools = something(parsed["nSchools"], get(sim_toml, "nSchools", nothing), 10)
+    seed     = !isnothing(parsed["seed"]) ? parsed["seed"] : get(sim_toml, "seed", nothing)
 
-    # Only set demographicsSpec if at least one field was specified
+    nyps_str  = something(parsed["nYeargroupsPerSchool"],
+                          _toml_str(get(sim_toml, "nYeargroupsPerSchool", nothing)),
+                          "5")
+    ncpsy_str = something(parsed["nClassesPerSchoolYeargroup"],
+                          _toml_str(get(sim_toml, "nClassesPerSchoolYeargroup", nothing)),
+                          "1:5")
+    nspc_str  = something(parsed["nStudentsPerClass"],
+                          _toml_str(get(sim_toml, "nStudentsPerClass", nothing)),
+                          "norm(30,7)")
+
+    # --- Latent variables: CLI > TOML > empty (simulate() fills in defaults) ---
+    latent_vars = if !isnothing(parsed["latentVariables"])
+        filter(!isempty, strip.(split(parsed["latentVariables"], ',')))
+    elseif haskey(sim_toml, "latentVariables")
+        String[string(v) for v in sim_toml["latentVariables"]]
+    else
+        String[]
+    end
+
+    # --- Linear effects: CLI (non-empty) > TOML > empty (simulate() fills in defaults) ---
+    linear_effs = if !isempty(parsed["linearEffect"])
+        LinearEffect[parse_linear_effect(string(e)) for e in parsed["linearEffect"]]
+    elseif haskey(toml, "linearEffect")
+        LinearEffect[parse_linear_effect_from_dict(d) for d in toml["linearEffect"]]
+    else
+        LinearEffect[]
+    end
+
+    # --- Random effects: CLI (non-empty) > TOML > empty (simulate() fills in defaults) ---
+    random_effs = if !isempty(parsed["randomEffect"])
+        RandomEffect[parse_random_effect(string(e)) for e in parsed["randomEffect"]]
+    elseif haskey(toml, "randomEffect")
+        RandomEffect[parse_random_effect_from_dict(d) for d in toml["randomEffect"]]
+    else
+        RandomEffect[]
+    end
+
+    # --- Questionnaires: TOML only (complex spec; no CLI equivalent) ---
+    questionnaires = if haskey(toml, "questionnaire")
+        QuestionnaireSpec[parse_questionnaire_spec_from_dict(d) for d in toml["questionnaire"]]
+    else
+        QuestionnaireSpec[]
+    end
+
+    # --- Demographics: CLI > TOML > empty (simulate() fills in defaults) ---
+    eth_wts  = _resolve_demo_weights(parsed["ethnicity"],        get(dem_toml, "ethnicity",        nothing))
+    sex_wts  = _resolve_demo_weights(parsed["sex"],              get(dem_toml, "sex",              nothing))
+    gend_wts = _resolve_demo_weights(parsed["genderIdentity"],   get(dem_toml, "genderIdentity",   nothing))
+    ori_wts  = _resolve_demo_weights(parsed["sexualOrientation"], get(dem_toml, "sexualOrientation", nothing))
+
     demo_spec = if any(!isempty, [eth_wts, sex_wts, gend_wts, ori_wts])
         DemographicsSpec(
             ethnicity         = eth_wts,
@@ -296,21 +504,43 @@ function parse_cli_args(args::Vector{String})::SimulationConfig
         nothing
     end
 
+    output = parsed["schema"] ? "schema" : parsed["output"]
+
     return SimulationConfig(
-        nWaves                     = parsed["nWaves"],
-        nSchools                   = parsed["nSchools"],
-        nYeargroupsPerSchool       = parse_sampler_spec(parsed["nYeargroupsPerSchool"]),
-        nClassesPerSchoolYeargroup = parse_sampler_spec(parsed["nClassesPerSchoolYeargroup"]),
-        nStudentsPerClass          = parse_sampler_spec(parsed["nStudentsPerClass"]),
+        nWaves                     = nWaves,
+        nSchools                   = nSchools,
+        nYeargroupsPerSchool       = parse_sampler_spec(nyps_str),
+        nClassesPerSchoolYeargroup = parse_sampler_spec(ncpsy_str),
+        nStudentsPerClass          = parse_sampler_spec(nspc_str),
         latentVariables            = latent_vars,
         linearEffects              = linear_effs,
         randomEffects              = random_effs,
+        questionnaires             = questionnaires,
         demographicsSpec           = demo_spec,
         demographicsUpdateFn       = default_demographics_update,
         naughtyMonkey              = default_naughty_monkey,
         output                     = output,
-        seed                       = parsed["seed"],
+        seed                       = seed,
     )
+end
+
+# Internal: convert a TOML numeric or string SamplerSpec value to a String for parsing.
+_toml_str(::Nothing)         = nothing
+_toml_str(v::Integer)        = string(v)
+_toml_str(v::AbstractString) = v
+
+# Internal: resolve a demographics weight vector from CLI string > TOML string > empty.
+function _resolve_demo_weights(
+    cli_str::Union{AbstractString,Nothing},
+    toml_str::Union{AbstractString,Nothing},
+)::Vector{Tuple{String,Float64}}
+    if !isnothing(cli_str)
+        return parse_demographics_weights(cli_str)
+    elseif !isnothing(toml_str)
+        return parse_demographics_weights(toml_str)
+    else
+        return Tuple{String,Float64}[]
+    end
 end
 
 """
