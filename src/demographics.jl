@@ -76,6 +76,8 @@ Sample a positive integer count from a `CountSpec`.
 - `Int`: return the value directly (must be ≥ 1).
 - `Range`: sample uniformly from [min, max].
 - `UnivariateDistribution`: draw a sample, round to nearest integer, clamp to ≥ 1.
+- `Function`: call `spec(rng)` where `spec` has signature `(rng::AbstractRNG) -> Number`,
+  round to nearest integer, clamp to ≥ 1.
 """
 function sample_count(rng::AbstractRNG, spec::CountSpec)::Int
     if spec isa Int
@@ -83,6 +85,8 @@ function sample_count(rng::AbstractRNG, spec::CountSpec)::Int
         return spec
     elseif spec isa Range
         return rand(rng, spec.min:spec.max)
+    elseif spec isa Function
+        return max(1, round(Int, spec(rng)))
     else  # UnivariateDistribution
         return max(1, round(Int, rand(rng, spec)))
     end

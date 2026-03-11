@@ -52,20 +52,22 @@ end
 """
     CountSpec
 
-A count specification: either a fixed integer, an inclusive range, or a
-`UnivariateDistribution` from `Distributions.jl` to sample from
+A count specification: either a fixed integer, an inclusive range, a
+`UnivariateDistribution` from `Distributions.jl`, or a callable
+`(rng::AbstractRNG) -> Number` to sample from
 (values are rounded to the nearest integer and clamped to ≥ 1).
 
 ## Examples
 
 ```julia
-5                      # fixed count
-Range(1, 5)            # uniform sample from [1, 5]
-Normal(30.0, 7.0)      # round(Normal(30, 7)) ≥ 1
+5                              # fixed count
+Range(1, 5)                    # uniform sample from [1, 5]
+Normal(30.0, 7.0)              # round(Normal(30, 7)) ≥ 1
 truncated(Normal(30.0, 7.0), 1, Inf)  # truncated to avoid non-positive values
+rng -> rand(rng, Poisson(25))  # custom callable: same interface as distributions
 ```
 """
-const CountSpec = Union{Int,Range,UnivariateDistribution}
+const CountSpec = Union{Int,Range,UnivariateDistribution,Function}
 
 """
     LinearEffect

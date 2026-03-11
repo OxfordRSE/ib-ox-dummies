@@ -86,6 +86,20 @@ using IbOxDummies
         rng = MersenneTwister(42)
         v = sample_count(rng, truncated(Normal(5.0, 1.0), 1.0, 10.0))
         @test 1 <= v <= 10
+
+        # Function callables are supported
+        rng = MersenneTwister(42)
+        fn = (rng) -> rand(rng, Poisson(10))
+        for _ in 1:20
+            v = sample_count(rng, fn)
+            @test v >= 1
+            @test v isa Int
+        end
+
+        # Lambda returning a fixed value
+        rng = MersenneTwister(42)
+        @test sample_count(rng, _ -> 7.0) == 7
+        @test sample_count(rng, _ -> 7.0) isa Int
     end
 
     @testset "weighted_sample" begin

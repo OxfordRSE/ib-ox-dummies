@@ -13,6 +13,9 @@ Supported formats:
 - `"unif(1,10)"` or `"uniform(1,10)"` → `DiscreteUniform(1, 10)`
 - `"exp(0.1)"` or `"exponential(0.1)"` → `Exponential(10.0)` (mean=1/rate)
 - `"gamma(2,3)"` → `Gamma(2.0, 3.0)` (shape, scale)
+
+For custom callables, use the Julia API directly:
+`rng -> rand(rng, MyDist(...))` — any `(rng::AbstractRNG) -> Number` function.
 """
 function parse_count_spec(s::AbstractString)::CountSpec
     s = strip(s)
