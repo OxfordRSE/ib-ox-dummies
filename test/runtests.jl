@@ -268,6 +268,43 @@ using IbOxDummies
         @test_throws ArgumentError parse_demographics_weights("no_colon")
     end
 
+    @testset "parse_custom_field_value" begin
+        # Constant string → constant function
+        f_const = parse_custom_field_value("United Kingdom")
+        @test f_const() == "United Kingdom"
+        @test f_const() == f_const()  # idempotent
+
+        # Faker method → callable
+        f_city = parse_custom_field_value("faker.city")
+        @test f_city() isa AbstractString
+        @test !isempty(f_city())
+
+        # Case-insensitive Faker prefix
+        f_city2 = parse_custom_field_value("Faker.City")
+        @test f_city2() isa AbstractString
+
+        # Other Faker methods
+        @test parse_custom_field_value("faker.last_name")() isa AbstractString
+        @test parse_custom_field_value("faker.email")() isa AbstractString
+        @test parse_custom_field_value("faker.company")() isa AbstractString
+        @test parse_custom_field_value("faker.country")() isa AbstractString
+
+        # Unknown Faker method → error
+        @test_throws ArgumentError parse_custom_field_value("faker.unknown_method_xyz")
+    end
+
+    @testset "parse_custom_fields" begin
+        d = Dict{String,Any}("d_city" => "faker.city", "d_country" => "United Kingdom")
+        result = parse_custom_fields(d)
+        @test haskey(result, "d_city")
+        @test haskey(result, "d_country")
+        @test result["d_city"]() isa AbstractString
+        @test result["d_country"]() == "United Kingdom"
+
+        # Empty dict → empty result
+        @test isempty(parse_custom_fields(Dict{String,Any}()))
+    end
+
     @testset "Demographics generation" begin
         rng = MersenneTwister(42)
         demo = generate_demographics(rng, "Test School", 3, 3, "3a", "abc123xyz")
@@ -901,6 +938,46 @@ using IbOxDummies
         @test !isnothing(cfg_sex.demographicsSpec)
         @test length(cfg_sex.demographicsSpec.sex) == 2
         @test ("M", 0.60) in cfg_sex.demographicsSpec.sex
+
+        # CLI --customField adds custom demographic fields
+        cfg_cf = parse_cli_args([
+            "--config", example_path,
+            "--customField", "d_region=North East",
+        ])
+        @test !isnothing(cfg_cf.demographicsSpec)
+        @test haskey(cfg_cf.demographicsSpec.customFields, "d_region")
+        @test cfg_cf.demographicsSpec.customFields["d_region"]() == "North East"
+
+        # CLI --customField with Faker method
+        cfg_cf2 = parse_cli_args([
+            "--customField", "d_city=faker.city",
+        ])
+        @test !isnothing(cfg_cf2.demographicsSpec)
+        @test haskey(cfg_cf2.demographicsSpec.customFields, "d_city")
+        @test cfg_cf2.demographicsSpec.customFields["d_city"]() isa AbstractString
+
+        # TOML customFields are loaded from example (d_city)
+        cfg_toml_cf = parse_cli_args(["--config", example_path])
+        @test !isnothing(cfg_toml_cf.demographicsSpec)
+        @test haskey(cfg_toml_cf.demographicsSpec.customFields, "d_city")
+        @test cfg_toml_cf.demographicsSpec.customFields["d_city"]() isa AbstractString
+
+        # End-to-end with customField: d_city appears in output
+        cfg_cf_run = parse_cli_args([
+            "--config", example_path,
+            "--nWaves", "1",
+            "--nSchools", "1",
+            "--nYeargroupsPerSchool", "1",
+            "--nClassesPerSchoolYeargroup", "1",
+            "--nStudentsPerClass", "2",
+            "--seed", "42",
+            "--customField", "d_region=South East",
+        ])
+        data_cf, _ = simulate(cfg_cf_run)
+        @test "d_city" in names(data_cf)     # from TOML
+        @test "d_region" in names(data_cf)   # from CLI
+        @test all(data_cf.d_region .== "South East")
+        @test all(x -> x isa AbstractString, data_cf.d_city)
 
         # End-to-end: simulate using the example TOML config (small run)
         cfg_run = parse_cli_args([

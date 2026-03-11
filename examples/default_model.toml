@@ -36,6 +36,14 @@ sex               = "M:0.490,F:0.490,I:0.020"
 genderIdentity    = "Cisgender:0.940,Transgender:0.020,Non-binary:0.030,Other:0.010"
 sexualOrientation = "Heterosexual:0.940,Bisexual:0.030,Gay or lesbian:0.020,Other:0.010"
 
+# Custom demographic fields: any extra column added to every row.
+# Values can be Faker method names (e.g. "faker.city") or constant strings.
+# Supported Faker methods: city, first_name, last_name, email, phone_number,
+#   company, address, country, state, postcode, street_address, name, user_name.
+# Column names conventionally start with "d_".
+[demographics.customFields]
+d_city    = "faker.city"           # a different city for each student (Faker)
+
 # ---------------------------------------------------------------------------
 # Linear effects
 #

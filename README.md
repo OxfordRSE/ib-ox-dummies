@@ -89,6 +89,7 @@ usage: ib_ox_dummies [--config CONFIG]
                      [--linearEffect EFFECT]... [--randomEffect EFFECT]...
                      [--ethnicity WEIGHTS] [--sex WEIGHTS]
                      [--genderIdentity WEIGHTS] [--sexualOrientation WEIGHTS]
+                     [--customField NAME=VALUE]...
                      [--seed SEED] [--output OUTPUT] [--schema]
                      [--version] [-h]
 
@@ -124,6 +125,9 @@ optional arguments:
   --sex WEIGHTS                            Sex distribution (overrides TOML/UK 2021 Census)
   --genderIdentity WEIGHTS                 Gender identity distribution (overrides TOML/UK 2021 Census)
   --sexualOrientation WEIGHTS              Sexual orientation distribution (overrides TOML/UK 2021 Census)
+  --customField NAME=VALUE                 Custom demographic column: value is a Faker method name
+                                           (e.g. "faker.city") or a constant string. Repeatable.
+                                           Overrides matching TOML [demographics.customFields] entries.
   --seed SEED                              Random seed (type: Int; overrides TOML)
   --output OUTPUT                          Output format: csv | json | schema (default: "csv")
   --schema                                 Print JSON Schema and exit
@@ -148,6 +152,11 @@ latentVariables   = ["depression", "anxiety"]
 [demographics]
 sex       = "M:0.490,F:0.490,I:0.020"
 ethnicity = "White British:0.812,Asian:0.083,Black:0.040,Mixed:0.030,Other:0.035"
+
+# Custom demographic fields: value is a Faker method name or a constant string.
+[demographics.customFields]
+d_city    = "faker.city"           # Faker-generated city name per student
+d_country = "United Kingdom"       # constant string on every row
 
 [[linearEffect]]
 target = "depression"
@@ -189,10 +198,12 @@ ib_ox_dummies --config examples/default_model.toml
 # TOML config with CLI override: use TOML model but change wave count and seed
 ib_ox_dummies --config examples/default_model.toml --nWaves 5 --seed 42
 
-# Custom demographics: equal sex split, simplified ethnicity distribution
+# Custom demographics: equal sex split, simplified ethnicity distribution, city field
 ib_ox_dummies \
   --sex "M:0.50,F:0.50" \
   --ethnicity "White British:0.70,Asian:0.20,Black:0.05,Other:0.05" \
+  --customField "d_city=faker.city" \
+  --customField "d_country=United Kingdom" \
   --nSchools 3 --nWaves 2 --seed 1
 
 # Custom latent model via CLI: depression driven by age + individual baseline + residual

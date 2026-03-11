@@ -129,6 +129,95 @@ function parse_demographics_weights(s::AbstractString)::Vector{Tuple{String,Floa
 end
 
 """
+    parse_custom_field_value(v) -> Function
+
+Convert a custom demographics field value (from TOML or a CLI `name=value` pair) into a
+zero-argument `Function` suitable for `DemographicsSpec.customFields`.
+
+Conversion rules:
+
+| Value                     | Generator returned                        |
+|---------------------------|-------------------------------------------|
+| `"faker.city"`            | calls `Faker.city()`                      |
+| `"faker.first_name"`      | calls `Faker.first_name()`                |
+| `"faker.last_name"`       | calls `Faker.last_name()`                 |
+| `"faker.email"`           | calls `Faker.email()`                     |
+| `"faker.phone_number"`    | calls `Faker.phone_number()`              |
+| `"faker.company"`         | calls `Faker.company()`                   |
+| `"faker.address"`         | calls `Faker.address()`                   |
+| Any other string `s`      | returns constant `s` on every call        |
+
+Faker method names are case-insensitive (normalised to lowercase with underscores).
+"""
+function parse_custom_field_value(v::AbstractString)::Function
+    s = strip(v)
+    if startswith(lowercase(s), "faker.")
+        method = lowercase(s[7:end])           # strip "faker." prefix
+        if method == "city"
+            return () -> Faker.city()
+        elseif method == "first_name" || method == "firstname"
+            return () -> Faker.first_name()
+        elseif method == "last_name" || method == "lastname"
+            return () -> Faker.last_name()
+        elseif method == "email"
+            return () -> Faker.email()
+        elseif method == "phone_number" || method == "phone"
+            return () -> Faker.phone_number()
+        elseif method == "company"
+            return () -> Faker.company()
+        elseif method == "address"
+            return () -> Faker.address()
+        elseif method == "country"
+            return () -> Faker.country()
+        elseif method == "state"
+            return () -> Faker.state()
+        elseif method == "postcode" || method == "zip_code" || method == "zipcode"
+            return () -> Faker.postcode()
+        elseif method == "street_address"
+            return () -> Faker.street_address()
+        elseif method == "name"
+            return () -> Faker.name()
+        elseif method == "user_name" || method == "username"
+            return () -> Faker.user_name()
+        else
+            throw(ArgumentError(
+                "Unknown Faker method: \"$s\". " *
+                "Supported: faker.city, faker.first_name, faker.last_name, faker.email, " *
+                "faker.phone_number, faker.company, faker.address, faker.country, " *
+                "faker.state, faker.postcode, faker.street_address, faker.name, faker.user_name"))
+        end
+    else
+        constant = String(s)
+        return () -> constant
+    end
+end
+
+"""
+    parse_custom_fields(d) -> Dict{String,Function}
+
+Parse a `Dict{String,Any}` (e.g. from a TOML `[demographics.customFields]` table) into
+a `Dict{String,Function}` suitable for `DemographicsSpec.customFields`.
+
+Each key becomes an output column name (should be prefixed with `d_` by convention);
+each string value is converted by [`parse_custom_field_value`](@ref).
+
+## TOML example
+
+```toml
+[demographics.customFields]
+d_city    = "faker.city"
+d_country = "United Kingdom"   # constant — same value on every row
+```
+"""
+function parse_custom_fields(d::AbstractDict)::Dict{String,Function}
+    result = Dict{String,Function}()
+    for (k, v) in d
+        result[string(k)] = parse_custom_field_value(string(v))
+    end
+    return result
+end
+
+"""
     parse_linear_effect(s) -> LinearEffect
 
 Parse a string of the form `"target:inputs:value"` into a `LinearEffect`.
@@ -301,6 +390,8 @@ The following top-level sections are recognised by `parse_cli_args`:
 - `[demographics]` — demographic weight strings:
   `ethnicity`, `sex`, `genderIdentity`, `sexualOrientation`
   (each formatted as `"Category1:weight1,Category2:weight2,..."}`)
+  and `[demographics.customFields]` — arbitrary extra columns mapped to
+  Faker method names (e.g. `"faker.city"`) or constant string values
 - `[[linearEffect]]` — array of linear effect tables
   (see `parse_linear_effect_from_dict`)
 - `[[randomEffect]]` — array of random effect tables
@@ -419,6 +510,13 @@ function parse_cli_args(args::Vector{String})::SimulationConfig
             help     = "Sexual orientation weight distribution: 'Category1:weight1,...'. " *
                        "Overrides the TOML [demographics] sexualOrientation field."
             default  = nothing
+        "--customField"
+            help     = "Custom demographic field: 'columnName=value' (repeatable). " *
+                       "Value is a Faker method name (e.g. 'faker.city') or a constant string. " *
+                       "Overrides matching TOML [demographics.customFields] entries. " *
+                       "Column names conventionally start with 'd_'."
+            action   = :append_arg
+            default  = nothing
         "--seed"
             help     = "Random seed for reproducibility. Overrides the TOML [simulation] seed field."
             arg_type = Int
@@ -493,12 +591,18 @@ function parse_cli_args(args::Vector{String})::SimulationConfig
     gend_wts = _resolve_demo_weights(parsed["genderIdentity"],   get(dem_toml, "genderIdentity",   nothing))
     ori_wts  = _resolve_demo_weights(parsed["sexualOrientation"], get(dem_toml, "sexualOrientation", nothing))
 
-    demo_spec = if any(!isempty, [eth_wts, sex_wts, gend_wts, ori_wts])
+    # Custom fields: start from TOML, then overlay CLI overrides
+    toml_custom_fields = parse_custom_fields(get(dem_toml, "customFields", Dict{String,Any}()))
+    cli_custom_fields  = _parse_cli_custom_fields(parsed["customField"])
+    custom_fields      = merge(toml_custom_fields, cli_custom_fields)  # CLI wins on conflict
+
+    demo_spec = if any(!isempty, [eth_wts, sex_wts, gend_wts, ori_wts]) || !isempty(custom_fields)
         DemographicsSpec(
             ethnicity         = eth_wts,
             sex               = sex_wts,
             genderIdentity    = gend_wts,
             sexualOrientation = ori_wts,
+            customFields      = custom_fields,
         )
     else
         nothing
@@ -541,6 +645,25 @@ function _resolve_demo_weights(
     else
         return Tuple{String,Float64}[]
     end
+end
+
+# Internal: parse --customField "name=value" CLI args into a Dict{String,Function}.
+function _parse_cli_custom_fields(
+    cli_args::Union{Vector,Nothing},
+)::Dict{String,Function}
+    isnothing(cli_args) && return Dict{String,Function}()
+    result = Dict{String,Function}()
+    for item in cli_args
+        s = strip(string(item))
+        idx = findfirst('=', s)
+        isnothing(idx) && throw(ArgumentError(
+            "Cannot parse --customField: \"$s\". Expected format: \"columnName=value\" " *
+            "(e.g. \"d_city=faker.city\" or \"d_country=United Kingdom\")"))
+        name  = strip(s[1:idx-1])
+        value = strip(s[idx+1:end])
+        result[name] = parse_custom_field_value(value)
+    end
+    return result
 end
 
 """

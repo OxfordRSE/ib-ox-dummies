@@ -129,6 +129,8 @@ export
     parse_linear_effect,
     parse_random_effect,
     parse_demographics_weights,
+    parse_custom_field_value,
+    parse_custom_fields,
     parse_questionnaire_spec_from_dict,
     parse_linear_effect_from_dict,
     parse_random_effect_from_dict,
