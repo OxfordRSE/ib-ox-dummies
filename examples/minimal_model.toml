@@ -2,10 +2,10 @@
 #
 # A minimal model with:
 # - Default Ns (3 waves, 10 schools, 5 yeargroups, 1-5 classes, ~30 students)
-# - One latent variable: depression
-# - One random effect: per individual × wave (models individual episode variation)
-# - One questionnaire: 3-item depression scale on a 7-level (0-6) scale,
-#   loading heavily onto the depression latent variable
+# - One latent variable: enthusiasm
+# - One random effect: per individual × wave (rare strong surge, 1% probability)
+# - One questionnaire: 3-item enthusiasm scale on a 7-level (0-6) scale,
+#   loading heavily onto the enthusiasm latent variable
 #
 # Run with:
 #   ib_ox_dummies --config examples/minimal_model.toml
@@ -23,36 +23,39 @@ nSchools                   = 10
 nYeargroupsPerSchool       = "5"         # fixed integer
 nClassesPerSchoolYeargroup = "1:5"       # uniform sample from [1, 5]
 nStudentsPerClass          = "norm(30,7)" # Normal distribution
-latentVariables            = ["depression"]
+latentVariables            = ["enthusiasm"]
 # seed = 42                              # uncomment for reproducible output
 
 # ---------------------------------------------------------------------------
 # Random effects
 #
 # One draw per unique combination of categoricalInputs.
-# 'value' is a SamplerSpec string: norm(μ,σ), halfnorm(μ,σ), etc.
+# 'value' is a SamplerSpec string: norm(μ,σ), halfnorm(μ,σ), mde(μ,σ), etc.
 # ---------------------------------------------------------------------------
 
-# Per-individual × wave random effect — models wave-to-wave mood variation
+# Per-individual × wave: rare strong enthusiasm surge (1% probability)
+# mde(0.75,0.2) draws Normal(0.75, 0.2) with 1% probability, else 0.
+# The latent variable is clamped to [0,1], so a surge of 0.75 drives enthusiasm
+# toward the maximum.
 [[randomEffect]]
-target            = "depression"
+target            = "enthusiasm"
 numericalInputs   = []
 categoricalInputs = ["uid", "wave"]
-value             = "norm(0,0.3)"
+value             = "mde(0.75,0.2)"
 
 # ---------------------------------------------------------------------------
 # Questionnaires
 #
-# A minimal 3-item depression questionnaire on a 7-level (0-6) scale.
-# The heavy loading (scale = 5.0) means a latent depression value of 1.0
-# maps to a mean item score of 5.0 on the 0-6 scale.
+# A minimal 3-item enthusiasm questionnaire on a 7-level (0-6) scale.
+# The heavy loading (scale = 6.0) means a fully enthused student (latent = 1.0)
+# maps to a mean item score of 6.0 on the 0-6 scale (near maximum).
 # ---------------------------------------------------------------------------
 
 [[questionnaire]]
-name      = "Depression_3"
-prefix    = "dep"
+name      = "Enthusiasm_3"
+prefix    = "ent"
 nItems    = 3
 nLevels   = 7
 noiseSD   = 0.8
 spoilRate = 0.01
-loadings  = [{latentName = "depression", scale = 5.0}]
+loadings  = [{latentName = "enthusiasm", scale = 6.0}]

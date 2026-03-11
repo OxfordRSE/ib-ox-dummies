@@ -127,6 +127,8 @@ Each `LinearEffect` contributes `value × ∏(inputs)` to the target latent.
 Each `RandomEffect` contributes `draw × ∏(numericalInputs)` where `draw` is looked
 up from `effect_draws` by the row's categorical group key, or drawn fresh for
 error terms (empty `categoricalInputs`).
+
+All latent values are clamped to [0, 1] before being returned.
 """
 function compute_row_latents(
     rng::AbstractRNG,
@@ -178,6 +180,11 @@ function compute_row_latents(
         end
 
         lv[eff.target] += draw * num_scale
+    end
+
+    # Clamp all latent values to [0, 1]
+    for name in latent_names
+        lv[name] = clamp(lv[name], 0.0, 1.0)
     end
 
     return lv

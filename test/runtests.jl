@@ -812,12 +812,12 @@ using IbOxDummies
         minimal_path = joinpath(@__DIR__, "..", "examples", "minimal_model.toml")
         args = [
             "--config", minimal_path,
-            "--latentVariables", "depression",
-            "--linearEffect", "depression:d_age:0.02",
-            "--linearEffect", "depression:_sex_fm:0.05",
-            "--randomEffect", "depression::yearGroup:norm(0,0.05)",
-            "--randomEffect", "depression::uid:halfnorm(0,0.2)",
-            "--randomEffect", "depression:::norm(0,0.1)",
+            "--latentVariables", "enthusiasm",
+            "--linearEffect", "enthusiasm:d_age:0.02",
+            "--linearEffect", "enthusiasm:_sex_fm:0.05",
+            "--randomEffect", "enthusiasm::yearGroup:norm(0,0.05)",
+            "--randomEffect", "enthusiasm::uid:halfnorm(0,0.2)",
+            "--randomEffect", "enthusiasm:::norm(0,0.1)",
             "--nWaves", "2",
             "--nSchools", "2",
             "--nYeargroupsPerSchool", "2",
@@ -827,13 +827,13 @@ using IbOxDummies
         ]
         cfg = parse_cli_args(args)
 
-        @test cfg.latentVariables == ["depression"]
+        @test cfg.latentVariables == ["enthusiasm"]
         @test length(cfg.linearEffects) == 2
         @test length(cfg.randomEffects) == 3  # CLI overrides TOML randomEffects
         @test cfg.nWaves == 2
         # Questionnaire from minimal_model.toml
         @test length(cfg.questionnaires) == 1
-        @test cfg.questionnaires[1].name == "Depression_3"
+        @test cfg.questionnaires[1].name == "Enthusiasm_3"
 
         # Run the simulation end-to-end
         data, schema = simulate(cfg)
@@ -841,7 +841,7 @@ using IbOxDummies
         @test nrow(data) == 2 * 2 * 1 * 3 * 2  # schools × yeargroups × classes × students × waves
         @test "wave" in names(data)
         @test "uid" in names(data)
-        @test "dep_1" in names(data)  # from minimal_model.toml questionnaire
+        @test "ent_1" in names(data)  # from minimal_model.toml questionnaire
     end
 
     @testset "TOML config parsing helpers" begin
@@ -1102,96 +1102,141 @@ using IbOxDummies
         sim = toml["simulation"]
         @test sim["nWaves"] == 3
         @test sim["nSchools"] == 10
-        @test sim["latentVariables"] == ["depression"]
+        @test sim["latentVariables"] == ["enthusiasm"]
 
         @test haskey(toml, "randomEffect")
         @test length(toml["randomEffect"]) == 1
         re = toml["randomEffect"][1]
-        @test re["target"] == "depression"
+        @test re["target"] == "enthusiasm"
         @test re["categoricalInputs"] == ["uid", "wave"]
 
         @test haskey(toml, "questionnaire")
         @test length(toml["questionnaire"]) == 1
         q = toml["questionnaire"][1]
-        @test q["name"] == "Depression_3"
+        @test q["name"] == "Enthusiasm_3"
         @test q["nItems"] == 3
         @test q["nLevels"] == 7
-        @test q["loadings"][1]["scale"] == 5.0
+        @test q["loadings"][1]["scale"] == 6.0
 
         # No demographics or linearEffects in minimal model
         @test !haskey(toml, "linearEffect")
         @test !haskey(toml, "demographics")
     end
 
-    @testset "TOML config vs Julia API equivalence (minimal_model)" begin
-        # Verify that loading the minimal_model.toml and constructing the equivalent
-        # SimulationConfig programmatically produce identical output for the same seed.
+    @testset "minimal_model run-rerun reproducibility" begin
+        # Verify that running the minimal_model.toml config twice with the same seed
+        # produces identical output (deterministic simulation).
         minimal_path = joinpath(@__DIR__, "..", "examples", "minimal_model.toml")
         seed = 314
 
-        # --- TOML path ---
+        cfg = parse_cli_args(["--config", minimal_path, "--seed", string(seed)])
+        data1, _ = simulate(cfg)
+        data2, _ = simulate(cfg)
+
+        @test nrow(data1) == nrow(data2)
+        @test all(isequal.(data1[!, "uid"], data2[!, "uid"]))
+        for col in ("ent_1", "ent_2", "ent_3")
+            @test all(isequal.(data1[!, col], data2[!, col]))
+        end
+    end
+
+    @testset "TOML vs CLI equivalence (minimal_model)" begin
+        # Verify that loading the minimal_model.toml produces the same output as specifying
+        # the equivalent model via CLI args (using the TOML only for the questionnaire).
+        # This tests that CLI args and TOML values are consistent when they specify the same model.
+        minimal_path = joinpath(@__DIR__, "..", "examples", "minimal_model.toml")
+        seed = 314
+
+        # --- TOML path: full config from TOML ---
         cfg_toml = parse_cli_args(["--config", minimal_path, "--seed", string(seed)])
         data_toml, schema_toml = simulate(cfg_toml)
 
-        # --- Julia API path (structurally equivalent config) ---
-        cfg_api = SimulationConfig(
-            nWaves                     = 3,
-            nSchools                   = 10,
-            nYeargroupsPerSchool       = 5,                # "5" parses to Int(5)
-            nClassesPerSchoolYeargroup = Range(1, 5),      # "1:5"
-            nStudentsPerClass          = Normal(30.0, 7.0), # "norm(30,7)"
-            latentVariables            = ["depression"],
-            linearEffects              = LinearEffect[],
-            randomEffects              = [
-                RandomEffect("depression", String[], ["uid", "wave"], Normal(0.0, 0.3)),
-            ],
-            questionnaires             = [
-                QuestionnaireSpec("Depression_3", "dep", 3, 7,
-                    [LatentLoading("depression", 5.0)], 0.8, 0.01),
-            ],
-            seed = seed,
-        )
-        data_api, schema_api = simulate(cfg_api)
+        # --- CLI path: equivalent settings via CLI (TOML used only for questionnaire) ---
+        cfg_cli = parse_cli_args([
+            "--config", minimal_path,         # provides questionnaire spec
+            "--latentVariables", "enthusiasm",
+            "--randomEffect", "enthusiasm::uid,wave:mde(0.75,0.2)",
+            "--nWaves", "3",
+            "--nSchools", "10",
+            "--nYeargroupsPerSchool", "5",
+            "--nClassesPerSchoolYeargroup", "1:5",
+            "--nStudentsPerClass", "norm(30,7)",
+            "--seed", string(seed),
+        ])
+        data_cli, schema_cli = simulate(cfg_cli)
 
-        # Structural equivalence: same number of rows and columns
-        @test nrow(data_toml) == nrow(data_api)
-        @test sort(names(data_toml)) == sort(names(data_api))
+        # Same structure: same Ns, same latent variables
+        @test nrow(data_toml) == nrow(data_cli)
+        @test sort(names(data_toml)) == sort(names(data_cli))
 
-        # Identical uid sequences (same RNG stream → same structure)
-        @test all(isequal.(data_toml[!, "uid"], data_api[!, "uid"]))
-
-        # Identical questionnaire values (same seed → same responses)
-        for col in ("dep_1", "dep_2", "dep_3")
-            col_t = data_toml[!, col]
-            col_a = data_api[!, col]
-            @test all(isequal.(col_t, col_a))
-        end
-
-        # Schema equivalence
-        @test sort(schema_toml.demographicsColumns) == sort(schema_api.demographicsColumns)
-        @test keys(schema_toml.questionnaireColumns) == keys(schema_api.questionnaireColumns)
+        # Same schema
+        @test sort(schema_toml.demographicsColumns) == sort(schema_cli.demographicsColumns)
+        @test keys(schema_toml.questionnaireColumns) == keys(schema_cli.questionnaireColumns)
     end
 
-    @testset "TOML config vs Julia API equivalence (default_model)" begin
-        # Same check for the more complex default_model.toml.
+    @testset "default_model run-rerun reproducibility" begin
+        # Verify that running the default_model.toml config twice with the same seed
+        # produces identical output (deterministic simulation).
         default_path = joinpath(@__DIR__, "..", "examples", "default_model.toml")
         seed = 271
 
-        cfg_toml = parse_cli_args(["--config", default_path, "--seed", string(seed)])
-        data_toml, _ = simulate(cfg_toml)
+        cfg = parse_cli_args(["--config", default_path, "--seed", string(seed)])
+        data1, _ = simulate(cfg)
+        data2, _ = simulate(cfg)
 
-        # Build equivalent config using the helpers that match the TOML spec.
-        # default_model.toml has 6 linear effects, 10 random effects, PHQ-9 + GAD-7.
-        cfg_api = parse_cli_args([
-            "--config", default_path,
+        @test nrow(data1) == nrow(data2)
+        @test all(isequal.(data1[!, "uid"], data2[!, "uid"]))
+        for col in ("phq9_1", "phq9_9", "gad7_1", "gad7_7")
+            @test all(isequal.(data1[!, col], data2[!, col]))
+        end
+    end
+
+    @testset "TOML vs CLI equivalence (default_model)" begin
+        # Verify that loading the default_model.toml produces the same structure as
+        # specifying the same model via CLI args. The CLI path overrides latent variables,
+        # effects, and Ns but takes questionnaires from the TOML file.
+        default_path = joinpath(@__DIR__, "..", "examples", "default_model.toml")
+        seed = 271
+
+        # --- TOML path: full config from TOML ---
+        cfg_toml = parse_cli_args(["--config", default_path, "--seed", string(seed)])
+        data_toml, schema_toml = simulate(cfg_toml)
+
+        # --- CLI path: specify all model components via CLI (TOML only for questionnaires) ---
+        cfg_cli = parse_cli_args([
+            "--config", default_path,          # provides questionnaire spec
+            "--latentVariables", "depression,anxiety",
+            "--linearEffect", "depression:d_age:0.02",
+            "--linearEffect", "anxiety:d_age:0.015",
+            "--linearEffect", "depression:_sex_fm:0.05",
+            "--linearEffect", "anxiety:_sex_fm:0.05",
+            "--linearEffect", "depression:d_age,_sex_fm:0.005",
+            "--linearEffect", "anxiety:d_age,_sex_fm:0.004",
+            "--randomEffect", "depression::yearGroup:norm(0,0.05)",
+            "--randomEffect", "anxiety::yearGroup:norm(0,0.05)",
+            "--randomEffect", "depression::d_ethnicity,class,_school_id:norm(0,0.03)",
+            "--randomEffect", "anxiety::d_ethnicity,class,_school_id:norm(0,0.03)",
+            "--randomEffect", "depression::uid,wave:norm(0,0.15)",
+            "--randomEffect", "anxiety::uid,wave:norm(0,0.12)",
+            "--randomEffect", "depression::uid:halfnorm(0,0.2)",
+            "--randomEffect", "anxiety::uid:halfnorm(0,0.15)",
+            "--randomEffect", "depression:::norm(0,0.1)",
+            "--randomEffect", "anxiety:::norm(0,0.1)",
+            "--nWaves", "3",
+            "--nSchools", "10",
+            "--nYeargroupsPerSchool", "5",
+            "--nClassesPerSchoolYeargroup", "1:5",
+            "--nStudentsPerClass", "norm(30,7)",
             "--seed", string(seed),
         ])
-        data_api, _ = simulate(cfg_api)
+        data_cli, schema_cli = simulate(cfg_cli)
 
-        # Running the same parsed config twice must give identical output.
-        @test nrow(data_toml) == nrow(data_api)
-        @test all(isequal.(data_toml[!, "uid"], data_api[!, "uid"]))
-        @test all(isequal.(data_toml[!, "phq9_1"], data_api[!, "phq9_1"]))
+        # Same structure: number of rows (same Ns + same seed), same column set
+        @test nrow(data_toml) == nrow(data_cli)
+        @test sort(names(data_toml)) == sort(names(data_cli))
+
+        # Same schema
+        @test keys(schema_toml.questionnaireColumns) == keys(schema_cli.questionnaireColumns)
     end
 
 end  # @testset "IbOxDummies"

@@ -14,6 +14,8 @@ Supported formats:
 - `"unif(1,10)"` or `"uniform(1,10)"` → `DiscreteUniform(1, 10)`
 - `"exp(0.1)"` or `"exponential(0.1)"` → `Exponential(10.0)` (mean=1/rate)
 - `"gamma(2,3)"` → `Gamma(2.0, 3.0)` (shape, scale)
+- `"mde(0.75,0.2)"` → Bernoulli spike: 1% probability of `Normal(0.75, 0.2)` draw, else 0
+- `"mde(0.75,0.2,0.01)"` → Bernoulli spike with explicit probability `p`
 
 For custom callables, use the Julia API directly:
 `rng -> rand(rng, MyDist(...))` — any `(rng::AbstractRNG) -> Number` function.
@@ -72,6 +74,16 @@ function parse_sampler_spec(s::AbstractString)::SamplerSpec
         return Gamma(parse(Float64, m[1]), parse(Float64, m[2]))
     end
 
+    # Bernoulli spike (Major Depressive Episode-style): mde(μ,σ) or mde(μ,σ,p)
+    # Returns a function that draws Normal(μ,σ) with probability p (default 0.01) else 0.
+    m = match(Regex("^mde\\(\\s*($float_pat)\\s*,\\s*($float_pat)(?:\\s*,\\s*($float_pat))?\\s*\\)\$", "i"), s)
+    if !isnothing(m)
+        mu    = parse(Float64, m[1])
+        sigma = parse(Float64, m[2])
+        prob  = isnothing(m[3]) ? 0.01 : parse(Float64, m[3])
+        return rng -> rand(rng) < prob ? rand(rng, Normal(mu, sigma)) : 0.0
+    end
+
     # Range: "min:max" or "min,max"
     m = match(r"^(\d+)[,:]\s*(\d+)$", s)
     if !isnothing(m)
@@ -88,7 +100,7 @@ function parse_sampler_spec(s::AbstractString)::SamplerSpec
         "Cannot parse sampler spec: \"$s\". " *
         "Supported: integer ('5'), range ('1:5'), " *
         "norm(μ,σ), halfnorm(μ,σ), poisson(λ), negbinom(r,p), lognorm(μ,σ), " *
-        "uniform(a,b), exponential(rate), gamma(shape,scale)."
+        "uniform(a,b), exponential(rate), gamma(shape,scale), mde(μ,σ[,p])."
     ))
 end
 
@@ -449,7 +461,8 @@ which have no equivalent CLI-only representation.
 
 - **SPEC** (for count args): integer `'5'`, range `'1:5'`, or distribution
   `'norm(30,7)'`, `'halfnorm(0,0.2)'`, `'poisson(10)'`, `'negbinom(5,0.5)'`,
-  `'lognorm(3,0.5)'`, `'uniform(1,10)'`, `'exponential(0.1)'`, `'gamma(2,3)'`
+  `'lognorm(3,0.5)'`, `'uniform(1,10)'`, `'exponential(0.1)'`, `'gamma(2,3)'`,
+  or Bernoulli spike `'mde(μ,σ[,p])'` (1% chance of Normal(μ,σ) draw, else 0)
 - **LinearEffect**: `"target:inputs:value"` e.g. `'depression:d_age:0.02'`
 - **RandomEffect**: `"target:numInputs:catInputs:spec"` e.g. `'depression::uid,wave:norm(0,0.15)'`
 - **Demographics**: `"Category1:weight1,Category2:weight2,..."` e.g. `'M:0.49,F:0.49,I:0.02'`
@@ -463,7 +476,7 @@ function parse_cli_args(args::Vector{String})::SimulationConfig
                       "SPEC formats: integer (e.g. '5'), inclusive range (e.g. '1:5'), " *
                       "or a distribution (e.g. 'norm(30,7)', 'halfnorm(0,0.2)', 'poisson(10)', " *
                       "'negbinom(5,0.5)', 'lognorm(3,0.5)', 'uniform(1,10)', 'exponential(0.1)', " *
-                      "'gamma(2,3)').\n\n" *
+                      "'gamma(2,3)', 'mde(μ,σ)' [Bernoulli spike: 1% chance of Normal(μ,σ)]).\n\n" *
                       "LinearEffect format: \"target:inputs:value\" " *
                       "(e.g. 'depression:d_age:0.02' or 'anxiety:d_age,_sex_fm:0.004').\n\n" *
                       "RandomEffect format: \"target:numInputs:catInputs:spec\" " *
