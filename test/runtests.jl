@@ -4,10 +4,6 @@ using Distributions
 using DataFrames
 using JSON3
 
-# Activate the package to pick up source files
-import Pkg
-Pkg.activate(joinpath(@__DIR__, ".."); io = devnull)
-
 using IbOxDummies
 
 @testset "IbOxDummies" begin
