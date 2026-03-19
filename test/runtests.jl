@@ -551,13 +551,21 @@ using IbOxDummies
         end
     end
 
-    @testset "simulate() requires questionnaires" begin
-        @test_throws ArgumentError simulate(SimulationConfig(
+    @testset "simulate() works without questionnaires" begin
+        data, schema = simulate(SimulationConfig(
             nWaves = 1, nSchools = 1,
             nYeargroupsPerSchool = 1, nClassesPerSchoolYeargroup = 1,
             nStudentsPerClass = 2, seed = 1,
-            # questionnaires omitted → should throw
+            includeLatents = true,
         ))
+
+        @test data isa DataFrame
+        @test nrow(data) == 2
+        @test isempty(schema.questionnaireColumns)
+        @test "uid" in names(data)
+        @test "wave" in names(data)
+        @test "l_depression" in names(data)
+        @test "l_anxiety" in names(data)
     end
 
     @testset "Full simulation with DemographicsSpec customFields" begin
@@ -728,6 +736,120 @@ using IbOxDummies
         end
         @test missing_q >= 0
         @test missing_q <= total_q
+
+        protected_cols = ["wave", "uid", "name", "school", "yearGroup", "schoolYear", "class"]
+        for col in protected_cols
+            @test !any(ismissing, data[!, col])
+        end
+    end
+
+    @testset "README examples" begin
+        default_data, default_schema = simulate(SimulationConfig(
+            nWaves = 1,
+            nSchools = 1,
+            nYeargroupsPerSchool = 1,
+            nClassesPerSchoolYeargroup = 1,
+            nStudentsPerClass = 2,
+            seed = 42,
+        ))
+        @test default_data isa DataFrame
+        @test isempty(default_schema.questionnaireColumns)
+        @test "uid" in names(default_data)
+
+        csv_data, csv_schema = simulate(SimulationConfig(
+            nWaves = 2,
+            nSchools = 3,
+            seed = 42,
+        ))
+        csv_buf = IOBuffer()
+        to_csv(csv_data, csv_schema; io = csv_buf)
+        csv_str = String(take!(csv_buf))
+        @test occursin("wave", csv_str)
+        @test occursin("uid", csv_str)
+
+        json_cfg = parse_cli_args([
+            "--nStudentsPerClass", "poisson(25)",
+            "--output", "json",
+            "--config", joinpath(@__DIR__, "..", "examples", "default_model.toml"),
+            "--nWaves", "1",
+            "--nSchools", "1",
+            "--nYeargroupsPerSchool", "1",
+            "--nClassesPerSchoolYeargroup", "1",
+            "--seed", "9",
+        ])
+        json_data, json_schema = simulate(json_cfg)
+        json_buf = IOBuffer()
+        to_json(json_data, json_schema; io = json_buf)
+        json_str = String(take!(json_buf))
+        parsed_json = JSON3.read(json_str)
+        @test length(parsed_json) == nrow(json_data)
+        @test haskey(parsed_json[1], :phq9_1)
+
+        default_path = joinpath(@__DIR__, "..", "examples", "default_model.toml")
+        cfg_toml = parse_cli_args([
+            "--config", default_path,
+            "--nWaves", "1",
+            "--nSchools", "1",
+            "--nYeargroupsPerSchool", "1",
+            "--nClassesPerSchoolYeargroup", "1",
+            "--nStudentsPerClass", "2",
+            "--seed", "42",
+        ])
+        toml_data, _ = simulate(cfg_toml)
+        @test "phq9_1" in names(toml_data)
+        @test "gad7_1" in names(toml_data)
+
+        cfg_override = parse_cli_args([
+            "--config", default_path,
+            "--nWaves", "5",
+            "--seed", "42",
+            "--nSchools", "1",
+            "--nYeargroupsPerSchool", "1",
+            "--nClassesPerSchoolYeargroup", "1",
+            "--nStudentsPerClass", "2",
+        ])
+        override_data, _ = simulate(cfg_override)
+        @test Set(skipmissing(override_data[!, "wave"])) == Set(1:5)
+
+        cfg_demo = parse_cli_args([
+            "--config", default_path,
+            "--sex", "M:0.50,F:0.50",
+            "--ethnicity", "White British:0.70,Asian:0.20,Black:0.05,Other:0.05",
+            "--customField", "d_city=faker.city",
+            "--customField", "d_country=United Kingdom",
+            "--nSchools", "1",
+            "--nWaves", "2",
+            "--nYeargroupsPerSchool", "1",
+            "--nClassesPerSchoolYeargroup", "1",
+            "--nStudentsPerClass", "2",
+            "--seed", "1",
+        ])
+        demo_data, _ = simulate(cfg_demo)
+        @test "d_city" in names(demo_data)
+        @test "d_country" in names(demo_data)
+        @test all(==("United Kingdom"), skipmissing(demo_data[!, "d_country"]))
+
+        latent_data, latent_schema = simulate(SimulationConfig(
+            latentVariables = ["depression"],
+            linearEffects = [LinearEffect("depression", ["d_age"], 0.02)],
+            randomEffects = [
+                RandomEffect("depression", [], ["uid"], truncated(Normal(0.0, 0.2), 0.0, Inf)),
+                RandomEffect("depression", [], [], Normal(0.0, 0.1)),
+            ],
+            nSchools = 3,
+            nWaves = 2,
+            nYeargroupsPerSchool = 1,
+            nClassesPerSchoolYeargroup = 1,
+            nStudentsPerClass = 2,
+            seed = 1,
+            includeLatents = true,
+        ))
+        @test isempty(latent_schema.questionnaireColumns)
+        @test "l_depression" in names(latent_data)
+
+        schema_json = to_json_schema(build_schema(QuestionnaireSpec[]))
+        @test occursin("\"wave\"", schema_json)
+        @test occursin("\"uid\"", schema_json)
     end
 
     @testset "parse_cli_args" begin
@@ -751,8 +873,7 @@ using IbOxDummies
         cfg_lv = parse_cli_args(["--latentVariables", "depression,anxiety"])
         @test cfg_lv.latentVariables == ["depression", "anxiety"]
 
-        # Empty latentVariables → empty Vector (model components including questionnaires must be
-        # explicitly provided to simulate(); none are auto-defaulted)
+        # Empty latentVariables remain empty in parsed CLI config; simulate() resolves defaults.
         cfg_lv0 = parse_cli_args(String[])
         @test isempty(cfg_lv0.latentVariables)
 

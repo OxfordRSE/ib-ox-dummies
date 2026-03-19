@@ -59,15 +59,10 @@ The simulation proceeds in five stages:
 5. Apply the naughty-monkey corruption function.
 """
 function simulate(config::SimulationConfig)::Tuple{DataFrame,Schema}
-    isempty(config.questionnaires) && throw(ArgumentError(
-        "No questionnaires specified. Provide questionnaires via the `questionnaires` field " *
-        "(e.g. `questionnaires = default_questionnaires()`), " *
-        "or via a TOML config file (`--config path/to/config.toml`)."
-    ))
-    qs    = config.questionnaires
-    lvars = config.latentVariables
-    coefs = config.linearEffects
-    effs  = config.randomEffects
+    qs = config.questionnaires
+    lvars = isempty(config.latentVariables) ? default_latent_variables() : config.latentVariables
+    coefs = isempty(config.linearEffects) ? default_linear_effects() : config.linearEffects
+    effs = isempty(config.randomEffects) ? default_random_effects() : config.randomEffects
     demo_spec = isnothing(config.demographicsSpec) ? default_demographics_spec() : config.demographicsSpec
 
     rng = isnothing(config.seed) ? MersenneTwister() : MersenneTwister(config.seed)

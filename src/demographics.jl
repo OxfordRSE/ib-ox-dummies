@@ -279,7 +279,8 @@ function default_naughty_monkey(
 )::Vector{DataRow}
     result = deepcopy(output)
     q_cols = collect(keys(schema.questionnaireColumns))
-    d_cols = schema.demographicsColumns
+    protected_demo_cols = Set(["wave", "uid", "name", "school", "yearGroup", "schoolYear", "class"])
+    d_cols = [col for col in schema.demographicsColumns if startswith(col, "d_") && col ∉ protected_demo_cols]
 
     for row in result
         for col in q_cols
