@@ -1356,4 +1356,234 @@ using IbOxDummies
         @test keys(schema_toml.questionnaireColumns) == keys(schema_cli.questionnaireColumns)
     end
 
+    # -----------------------------------------------------------------------
+    # BeeWell model tests
+    # -----------------------------------------------------------------------
+
+    @testset "beewell_model.toml structure" begin
+        beewell_path = joinpath(@__DIR__, "..", "examples", "beewell_model.toml")
+        toml = load_toml_config(beewell_path)
+
+        @test haskey(toml, "simulation")
+        sim = toml["simulation"]
+        @test length(sim["latentVariables"]) == 13
+        @test "wellbeing" in sim["latentVariables"]
+        @test "depression" in sim["latentVariables"]
+        @test "anxiety" in sim["latentVariables"]
+        @test "behaviour" in sim["latentVariables"]
+        @test "physical_health" in sim["latentVariables"]
+        @test "social_connection" in sim["latentVariables"]
+        @test "future_optimism" in sim["latentVariables"]
+        @test "socioeconomic" in sim["latentVariables"]
+        @test "migration" in sim["latentVariables"]
+        @test "discrimination" in sim["latentVariables"]
+        @test "victimization" in sim["latentVariables"]
+        @test "screen_time" in sim["latentVariables"]
+
+        @test haskey(toml, "questionnaire")
+        qs = toml["questionnaire"]
+        @test length(qs) == 49  # all BeeWell questionnaire specs
+
+        # Check a few key questionnaire blocks by name
+        names = [q["name"] for q in qs]
+        @test "BW_Migration" in names
+        @test "BW_LifeSatisfaction" in names
+        @test "BW_Wellbeing_SWEMWBS" in names
+        @test "BW_SelfEsteem" in names
+        @test "BW_EmoDifficulties" in names
+        @test "BW_BehavDifficulties" in names
+        @test "BW_Activities" in names
+        @test "BW_Future" in names
+        @test "BW_Friendships" in names
+        @test "BW_Bullying" in names
+        @test "BW_Discrimination" in names
+        @test "BW_MentalHealthContact" in names
+        @test "BW_Kooth" in names
+
+        # Verify item counts for a selection of specs
+        life_sat = qs[findfirst(q -> q["name"] == "BW_LifeSatisfaction", qs)]
+        @test life_sat["nItems"] == 1
+        @test life_sat["nLevels"] == 11
+
+        swemwbs = qs[findfirst(q -> q["name"] == "BW_Wellbeing_SWEMWBS", qs)]
+        @test swemwbs["nItems"] == 7
+        @test swemwbs["nLevels"] == 5
+
+        emodies = qs[findfirst(q -> q["name"] == "BW_EmoDifficulties", qs)]
+        @test emodies["nItems"] == 10
+        @test emodies["nLevels"] == 3
+
+        behav = qs[findfirst(q -> q["name"] == "BW_BehavDifficulties", qs)]
+        @test behav["nItems"] == 6
+        @test behav["nLevels"] == 3
+
+        # Verify reverse-scored item 4 in behavioural difficulties uses itemScales
+        behav_loadings = behav["loadings"]
+        behaviour_loading = findfirst(l -> l["latentName"] == "behaviour", behav_loadings)
+        @test !isnothing(behaviour_loading)
+        wellbeing_loading = findfirst(l -> l["latentName"] == "wellbeing", behav_loadings)
+        @test !isnothing(wellbeing_loading)
+
+        activ = qs[findfirst(q -> q["name"] == "BW_Activities", qs)]
+        @test activ["nItems"] == 11
+        @test activ["nLevels"] == 6
+
+        plans = qs[findfirst(q -> q["name"] == "BW_Plans", qs)]
+        @test plans["nItems"] == 8
+        @test plans["nLevels"] == 2
+
+        discloc = qs[findfirst(q -> q["name"] == "BW_DiscrimLocation", qs)]
+        @test discloc["nItems"] == 7
+        @test discloc["nLevels"] == 2
+
+        mhcontact = qs[findfirst(q -> q["name"] == "BW_MentalHealthContact", qs)]
+        @test mhcontact["nItems"] == 6
+        @test mhcontact["nLevels"] == 5
+    end
+
+    @testset "beewell_model run and column coverage" begin
+        beewell_path = joinpath(@__DIR__, "..", "examples", "beewell_model.toml")
+        cfg = parse_cli_args([
+            "--config", beewell_path,
+            "--nWaves", "1",
+            "--nSchools", "2",
+            "--nYeargroupsPerSchool", "2",
+            "--nClassesPerSchoolYeargroup", "1",
+            "--nStudentsPerClass", "5",
+            "--seed", "42",
+        ])
+        data, schema = simulate(cfg)
+        @test data isa DataFrame
+        @test nrow(data) == 1 * 2 * 2 * 1 * 5  # waves × schools × ygs × classes × students
+
+        # Check a selection of expected questionnaire columns are present
+        expected_cols = [
+            "bw_migration_1", "bw_migration_2", "bw_migration_3",
+            "bw_arrival_1",
+            "bw_life_sat_1",
+            "bw_wbeing_1", "bw_wbeing_7",
+            "bw_selfest_1", "bw_selfest_5",
+            "bw_emoreg_1", "bw_emoreg_3",
+            "bw_appear_1",
+            "bw_stress_1", "bw_stress_2",
+            "bw_coping_1", "bw_coping_2",
+            "bw_emodies_1", "bw_emodies_10",
+            "bw_behav_1", "bw_behav_6",
+            "bw_physh_1",
+            "bw_sleep_1",
+            "bw_physact_1",
+            "bw_physdur_1",
+            "bw_fruitveg_1",
+            "bw_unhealthy_1", "bw_unhealthy_4",
+            "bw_freetime_1",
+            "bw_socmedia_1",
+            "bw_socmtype_1", "bw_socmtype_2",
+            "bw_volunteer_1",
+            "bw_activ_1", "bw_activ_11",
+            "bw_schoolconn_1",
+            "bw_attain_1",
+            "bw_staffrel_1", "bw_staffrel_4",
+            "bw_iso_1",
+            "bw_isodays_1",
+            "bw_isodur_1",
+            "bw_schpress_1",
+            "bw_homeenv_1",
+            "bw_safety_1",
+            "bw_localenv_1", "bw_localenv_4",
+            "bw_beinheard_1",
+            "bw_foodsec_1",
+            "bw_material_1",
+            "bw_future_1", "bw_future_7",
+            "bw_careersed_1",
+            "bw_careershlp_1",
+            "bw_plans_1", "bw_plans_8",
+            "bw_gmacs_1", "bw_gmacs_2",
+            "bw_parentsrel_1", "bw_parentsrel_4",
+            "bw_friends_1", "bw_friends_4",
+            "bw_lonely_1",
+            "bw_discrim_1", "bw_discrim_5",
+            "bw_discloc_1", "bw_discloc_7",
+            "bw_bullying_1", "bw_bullying_3",
+            "bw_support_1",
+            "bw_mhcontact_1", "bw_mhcontact_6",
+            "bw_kooth_1",
+        ]
+        for col in expected_cols
+            @test col in names(data)
+        end
+
+        # Check response values are in the expected ranges
+        @test all(x -> ismissing(x) || 0 <= x <= 10, data[!, "bw_life_sat_1"])
+        @test all(x -> ismissing(x) || 0 <= x <= 4,  data[!, "bw_wbeing_1"])
+        @test all(x -> ismissing(x) || 0 <= x <= 2,  data[!, "bw_emodies_1"])
+        @test all(x -> ismissing(x) || 0 <= x <= 2,  data[!, "bw_behav_1"])
+        @test all(x -> ismissing(x) || 0 <= x <= 7,  data[!, "bw_physact_1"])
+        @test all(x -> ismissing(x) || 0 <= x <= 1,  data[!, "bw_sleep_1"])
+        @test all(x -> ismissing(x) || 0 <= x <= 1,  data[!, "bw_iso_1"])
+        @test all(x -> ismissing(x) || 0 <= x <= 10, data[!, "bw_homeenv_1"])
+        @test all(x -> ismissing(x) || 0 <= x <= 3,  data[!, "bw_future_1"])
+        @test all(x -> ismissing(x) || 0 <= x <= 4,  data[!, "bw_discrim_1"])
+        @test all(x -> ismissing(x) || 0 <= x <= 1,  data[!, "bw_discloc_1"])
+        @test all(x -> ismissing(x) || 0 <= x <= 3,  data[!, "bw_bullying_1"])
+        @test all(x -> ismissing(x) || 0 <= x <= 3,  data[!, "bw_kooth_1"])
+    end
+
+    @testset "beewell_model run-rerun reproducibility" begin
+        beewell_path = joinpath(@__DIR__, "..", "examples", "beewell_model.toml")
+        seed = 999
+
+        cfg = parse_cli_args(["--config", beewell_path, "--seed", string(seed)])
+        data1, _ = simulate(cfg)
+        data2, _ = simulate(cfg)
+
+        @test nrow(data1) == nrow(data2)
+        @test all(isequal.(data1[!, "uid"], data2[!, "uid"]))
+        for col in ("bw_life_sat_1", "bw_wbeing_1", "bw_emodies_1",
+                    "bw_physact_1", "bw_future_1", "bw_lonely_1", "bw_kooth_1")
+            @test all(isequal.(data1[!, col], data2[!, col]))
+        end
+    end
+
+    @testset "beewell Julia API matches TOML config" begin
+        # Verify that beewell_questionnaires() returns exactly the same number
+        # and names of specs as the TOML file defines.
+        beewell_path = joinpath(@__DIR__, "..", "examples", "beewell_model.toml")
+        toml = load_toml_config(beewell_path)
+        toml_names = Set(q["name"] for q in toml["questionnaire"])
+
+        api_specs = beewell_questionnaires()
+        api_names = Set(s.name for s in api_specs)
+
+        @test length(api_specs) == 49
+        @test toml_names == api_names
+
+        # Verify latent variable lists match
+        @test Set(beewell_latent_variables()) == Set(toml["simulation"]["latentVariables"])
+    end
+
+    @testset "beewell Julia API simulation" begin
+        # End-to-end run using the Julia API (not TOML), producing the same
+        # questionnaire columns as the TOML-based run.
+        data, schema = simulate(SimulationConfig(
+            seed            = 7,
+            nWaves          = 1,
+            nSchools        = 2,
+            nYeargroupsPerSchool       = 2,
+            nClassesPerSchoolYeargroup = 1,
+            nStudentsPerClass          = 4,
+            latentVariables = beewell_latent_variables(),
+            linearEffects   = beewell_linear_effects(),
+            randomEffects   = beewell_random_effects(),
+            questionnaires  = beewell_questionnaires(),
+        ))
+        @test data isa DataFrame
+        @test "bw_life_sat_1" in names(data)
+        @test "bw_wbeing_1" in names(data)
+        @test "bw_kooth_1" in names(data)
+        @test nrow(data) == 1 * 2 * 2 * 1 * 4
+        # Schema should list all bw_ questionnaire columns
+        bw_cols = [c for c in keys(schema.questionnaireColumns) if startswith(c, "bw_")]
+        @test length(bw_cols) == 136  # 136 total bw_* questionnaire columns
+    end
+
 end  # @testset "IbOxDummies"

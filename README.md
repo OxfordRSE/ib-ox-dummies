@@ -203,6 +203,9 @@ ib_ox_dummies --config examples/default_model.toml
 # TOML config with CLI override: use TOML model but change wave count and seed
 ib_ox_dummies --config examples/default_model.toml --nWaves 5 --seed 42
 
+# #BeeWell GM Survey — full 136-item questionnaire (see examples/beewell_model.toml)
+ib_ox_dummies --config examples/beewell_model.toml --seed 42
+
 # Custom demographics: equal sex split, simplified ethnicity distribution, city field
 ib_ox_dummies \
   --sex "M:0.50,F:0.50" \
@@ -353,6 +356,86 @@ Loads on the `"depression"` latent variable (scale 2.5).
 
 Seven items scored 0–3, measuring anxiety severity.
 Loads on `"anxiety"` (scale 2.5) and secondarily `"depression"` (scale 0.8).
+
+### #BeeWell GM Survey (2025)
+
+Full implementation of the Greater Manchester [#BeeWell Survey](https://beewellprogramme.org)
+(updated August 2025). Covers all 124+ survey items across the **Domains of Wellbeing** and
+**Drivers of Wellbeing**, grouped into 49 `QuestionnaireSpec`s that together produce
+**136 `bw_*` columns**.
+
+**Questions modelled:**
+
+| Range | Scale | Description |
+|-------|-------|-------------|
+| Q4–5 | 3-pt / 16-pt | Migration background (Q1–3 are demographic columns) |
+| Q6 | 0–10 | Life satisfaction (ONS) |
+| Q7–13 | 0–4 | Psychological wellbeing (SWEMWBS, 7 items) |
+| Q14–18 | 0–3 | Self-esteem (Rosenberg, 5 items) |
+| Q19–21 | 0–2 | Emotion regulation (CWMS coping subscale) |
+| Q22 | 0–10 | Appearance happiness |
+| Q23–26 | 0–4 | Stress & coping (PSS-4; not Year 7) |
+| Q27–36 | 0–2 | Emotional difficulties (Me & My Feelings, 10 items) |
+| Q37–42 | 0–2 | Behavioural difficulties (Me & My Feelings, 6 items; item 4 reverse-scored) |
+| Q43–51 | mixed | Physical health, sleep, activity, nutrition |
+| Q52–67 | mixed | Free time, social media, volunteering, 11 activities |
+| Q68–77 | mixed | School connection, attainment, staff relationships, isolation, pressure |
+| Q78–86 | mixed | Home/local environment, food security, material deprivation |
+| Q87–98 | mixed | Future readiness, careers education (Year 10), GMACS |
+| Q99–107 | 0–4 / 0–4 | Parent relationships, friendships, loneliness |
+| Q108–116 | mixed | Discrimination (5 characteristics + 7 locations), bullying |
+| Q117–124 | mixed | Wellbeing support access, mental health contacts, Kooth |
+
+**Latent variables** (13 total, all clamped to [0, 1]):
+
+| Name | Construct |
+|------|-----------|
+| `wellbeing` | Positive psychological wellbeing |
+| `depression` | Depressive affect |
+| `anxiety` | Anxious / worried affect |
+| `behaviour` | Behavioural difficulties |
+| `physical_health` | Physical health and activity level |
+| `unhealthy_diet` | Frequency of unhealthy food/drink |
+| `social_connection` | Quality of relationships and belonging |
+| `future_optimism` | Hope and readiness for the future |
+| `socioeconomic` | Socioeconomic advantage |
+| `migration` | Migrant family background (spike: ~15 % non-zero) |
+| `discrimination` | Exposure to discrimination (spike: ~10 %) |
+| `victimization` | Exposure to bullying (spike: ~10 %) |
+| `screen_time` | Daily screen / social-media engagement |
+
+**Usage via TOML (CLI):**
+
+```bash
+ib_ox_dummies --config examples/beewell_model.toml --seed 42
+```
+
+**Usage via Julia API:**
+
+```julia
+using IbOxDummies
+
+data, schema = simulate(SimulationConfig(
+    seed            = 42,
+    latentVariables = beewell_latent_variables(),
+    linearEffects   = beewell_linear_effects(),
+    randomEffects   = beewell_random_effects(),
+    questionnaires  = beewell_questionnaires(),
+))
+```
+
+**Sample output** (first 5 rows, selected columns; seed = 42, 1 wave, 2 schools):
+
+| wave | uid | school | d_age | d_sex | bw_life_sat_1 | bw_wbeing_1 | bw_selfest_1 | bw_emodies_1 | bw_behav_1 | bw_physh_1 | bw_sleep_1 | bw_physact_1 | bw_future_1 | bw_lonely_1 | bw_bullying_1 | bw_kooth_1 |
+|------|-----|--------|-------|-------|---------------|-------------|--------------|--------------|------------|------------|------------|--------------|-------------|-------------|---------------|------------|
+| 1 | bu061oj01 | Cleliamouth High School | 10 | M | 2 | 3 | 1 | 1 | 0 | 3 | 1 | 3 | 0 | 2 | 0 | 2 |
+| 1 | vdpqocpmo | Cleliamouth High School | 10 | F | 0 | 1 | 1 | 1 | 0 | 4 | 0 | 3 | 2 | 2 | 0 | 2 |
+| 1 | as8wsya9x | Cleliamouth High School | 10 | M | 3 | 1 | 2 | 0 | 0 | 3 | 1 | 4 | 2 | 2 | 0 | 0 |
+| 1 | 54dc8alga | Cleliamouth High School | 10 | — | 2 | 1 | 2 | 2 | 0 | 2 | 0 | 0 | 3 | 4 | 0 | 1 |
+| 1 | 5uufz0qy3 | Cleliamouth High School | 10 | F | 6 | 2 | 0 | 0 | 0 | 2 | 1 | 6 | 2 | 1 | 0 | 1 |
+
+The full output has **148 columns** (12 demographics + 136 questionnaire items).
+See [`examples/beewell_model.toml`](examples/beewell_model.toml) for the complete model.
 
 ## Development
 

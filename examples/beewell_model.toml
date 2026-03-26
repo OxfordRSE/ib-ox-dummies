@@ -1,0 +1,1140 @@
+# IbOxDummies configuration — #BeeWell GM Survey model
+#
+# Generates synthetic responses to the Greater Manchester #BeeWell Survey
+# (updated August 2025; https://beewellprogramme.org).
+#
+# The survey covers all major wellbeing domains and drivers for secondary
+# school pupils:
+#
+#   Demographic items  : Q4–5  (migration background; Q1–3 map to existing
+#                                demographic columns d_sex, d_genderIdentity,
+#                                and d_sexualOrientation)
+#   Domains of wellbeing:
+#     Q6              Life satisfaction (ONS, 0–10)
+#     Q7–13           Psychological wellbeing (SWEMWBS, 5-pt)
+#     Q14–18          Self-esteem (Rosenberg, 4-pt)
+#     Q19–21          Emotion regulation (CWMS coping subscale, 3-pt)
+#     Q22             Appearance happiness (0–10)
+#     Q23–24          Stress (PSS-4, 5-pt; not asked of Year 7)
+#     Q25–26          Coping (PSS-4 positive items, 5-pt; not asked of Year 7)
+#     Q27–36          Emotional difficulties (Me & My Feelings, 3-pt)
+#     Q37–42          Behavioural difficulties (Me & My Feelings, 3-pt;
+#                      item 4 "I am calm" is reverse-scored)
+#   Drivers of wellbeing:
+#     Q43             Physical health rating (5-pt)
+#     Q44             Sleep adequacy (binary)
+#     Q45             Physical activity days/week (0–7)
+#     Q46             Physical activity duration (4-pt)
+#     Q47             Fruit & veg portions/day (6-pt)
+#     Q48–51          Unhealthy food/drink frequency (8-pt each)
+#     Q52             Free time (5-pt)
+#     Q53             Social media time/day (8-pt, hours)
+#     Q54–55          Social media type: active vs passive (5-pt each)
+#     Q56             Volunteering frequency (6-pt)
+#     Q57–67          Activity participation, 11 activities (6-pt each)
+#     Q68             School connection / belonging (5-pt)
+#     Q69             Attainment happiness (0–10)
+#     Q70–73          Relationships with school staff (5-pt each)
+#     Q74             Placed in school isolation (binary)
+#     Q75             Days per week in isolation (5-pt; conditional on Q74)
+#     Q76             Isolation duration (13-pt; conditional on Q74)
+#     Q77             School pressure (4-pt)
+#     Q78             Home environment happiness (0–10)
+#     Q79             Safety in local area (5-pt)
+#     Q80–83          Local environment quality (5-pt each)
+#     Q84             Being heard outside school/home (5-pt)
+#     Q85             Food security (6-pt)
+#     Q86             Material deprivation happiness (0–10)
+#     Q87–93          Future readiness (4-pt; Q88–93 not asked of Year 7)
+#     Q94             Careers education received (count 0–8 types)
+#     Q95             Careers education helpfulness (4-pt; Year 10)
+#     Q96a–h          Post-Year-11 plans, 8 options (binary each; Year 10)
+#     Q97–98          GMACS awareness and usage (binary each; Year 10)
+#     Q99–102         Relationships with parents/carers (5-pt each)
+#     Q103–106        Friendships and social support (5-pt each)
+#     Q107            Loneliness (5-pt)
+#     Q108–112        Discrimination experiences by 5 characteristics (5-pt)
+#     Q113a–g         Where discrimination occurred, 7 locations (binary each)
+#     Q114–116        Bullying — physical, social, cyber (4-pt each)
+#     Q117            Access to wellbeing support (5-pt)
+#     Q118–123        Mental health contact by 6 source types (5-pt each)
+#     Q124            Kooth usage (4-pt)
+#
+# Latent variables (all clamped to [0, 1] before driving item means):
+#   wellbeing          — general positive psychological wellbeing
+#   depression         — depressive affect
+#   anxiety            — anxious/worried affect
+#   behaviour          — behavioural difficulties (anger, aggression)
+#   physical_health    — physical health and activity
+#   unhealthy_diet     — frequency of unhealthy food consumption
+#   social_connection  — quality of relationships and social belonging
+#   future_optimism    — hope and readiness for the future
+#   socioeconomic      — socioeconomic advantage
+#   migration          — migrant family background (spike: ~15 % non-zero)
+#   discrimination     — exposure to discrimination (spike: ~10 % non-zero)
+#   victimization      — exposure to bullying (spike: ~10 % non-zero)
+#   screen_time        — daily screen / social-media time
+#
+# Item-score conventions (unless noted):
+#   Higher score = more of the construct (e.g. higher wellbeing, more stress).
+#   Agree/disagree items are recoded so 0 = Strongly disagree, max = Strongly agree,
+#   making positive-valence loadings intuitive throughout.
+#   Safety (Q79) is recoded 0 = Very unsafe … 3 = Very safe, 4 = Don't know.
+#
+# Run with:
+#   ib_ox_dummies --config examples/beewell_model.toml
+#
+# Override individual settings from the command line, e.g.:
+#   ib_ox_dummies --config examples/beewell_model.toml --nWaves 1 --seed 42
+
+# ---------------------------------------------------------------------------
+# Simulation parameters
+# ---------------------------------------------------------------------------
+
+[simulation]
+nWaves                     = 3
+nSchools                   = 10
+nYeargroupsPerSchool       = "5"
+nClassesPerSchoolYeargroup = "1:5"
+nStudentsPerClass          = "norm(30,7)"
+latentVariables            = [
+    "wellbeing", "depression", "anxiety", "behaviour",
+    "physical_health", "unhealthy_diet", "social_connection",
+    "future_optimism", "socioeconomic",
+    "migration", "discrimination", "victimization", "screen_time",
+]
+# seed = 42   # uncomment for reproducible output
+
+# ---------------------------------------------------------------------------
+# Demographics  (UK 2021 Census-derived proportions)
+# Q1 (gender identity), Q2 (transgender), Q3 (sexual orientation) are
+# captured by the standard demographic columns below.
+# ---------------------------------------------------------------------------
+
+[demographics]
+ethnicity         = "White British:0.812,Asian:0.083,Black:0.040,Mixed:0.030,Other:0.035"
+sex               = "M:0.490,F:0.490,I:0.020"
+genderIdentity    = "Cisgender:0.940,Transgender:0.020,Non-binary:0.030,Other:0.010"
+sexualOrientation = "Heterosexual:0.940,Bisexual:0.030,Gay or lesbian:0.020,Other:0.010"
+
+# ---------------------------------------------------------------------------
+# Linear effects (fixed)
+# ---------------------------------------------------------------------------
+
+# Constant (intercept) offsets so average latent values fall in a realistic range
+
+[[linearEffect]]
+target = "wellbeing"
+inputs = []
+value  = 0.45
+
+[[linearEffect]]
+target = "social_connection"
+inputs = []
+value  = 0.50
+
+[[linearEffect]]
+target = "physical_health"
+inputs = []
+value  = 0.50
+
+[[linearEffect]]
+target = "future_optimism"
+inputs = []
+value  = 0.45
+
+[[linearEffect]]
+target = "socioeconomic"
+inputs = []
+value  = 0.45
+
+[[linearEffect]]
+target = "unhealthy_diet"
+inputs = []
+value  = 0.30
+
+[[linearEffect]]
+target = "screen_time"
+inputs = []
+value  = 0.25
+
+# Age effects (older pupils report slightly worse mental health on average)
+
+[[linearEffect]]
+target = "depression"
+inputs = ["d_age"]
+value  = 0.012
+
+[[linearEffect]]
+target = "anxiety"
+inputs = ["d_age"]
+value  = 0.010
+
+[[linearEffect]]
+target = "wellbeing"
+inputs = ["d_age"]
+value  = -0.008
+
+# Sex effects (_sex_fm: F = +1, M = −1, other = 0)
+
+[[linearEffect]]
+target = "depression"
+inputs = ["_sex_fm"]
+value  = 0.05
+
+[[linearEffect]]
+target = "anxiety"
+inputs = ["_sex_fm"]
+value  = 0.05
+
+[[linearEffect]]
+target = "wellbeing"
+inputs = ["_sex_fm"]
+value  = -0.03
+
+# ---------------------------------------------------------------------------
+# Random effects
+# ---------------------------------------------------------------------------
+
+# --- Individual baselines (half-normal: always ≥ 0) ---
+
+[[randomEffect]]
+target            = "wellbeing"
+categoricalInputs = ["uid"]
+value             = "halfnorm(0,0.25)"
+
+[[randomEffect]]
+target            = "depression"
+categoricalInputs = ["uid"]
+value             = "halfnorm(0,0.15)"
+
+[[randomEffect]]
+target            = "anxiety"
+categoricalInputs = ["uid"]
+value             = "halfnorm(0,0.15)"
+
+[[randomEffect]]
+target            = "behaviour"
+categoricalInputs = ["uid"]
+value             = "halfnorm(0,0.12)"
+
+[[randomEffect]]
+target            = "physical_health"
+categoricalInputs = ["uid"]
+value             = "halfnorm(0,0.20)"
+
+[[randomEffect]]
+target            = "unhealthy_diet"
+categoricalInputs = ["uid"]
+value             = "halfnorm(0,0.20)"
+
+[[randomEffect]]
+target            = "social_connection"
+categoricalInputs = ["uid"]
+value             = "halfnorm(0,0.20)"
+
+[[randomEffect]]
+target            = "future_optimism"
+categoricalInputs = ["uid"]
+value             = "halfnorm(0,0.20)"
+
+[[randomEffect]]
+target            = "socioeconomic"
+categoricalInputs = ["uid"]
+value             = "halfnorm(0,0.20)"
+
+[[randomEffect]]
+target            = "screen_time"
+categoricalInputs = ["uid"]
+value             = "halfnorm(0,0.25)"
+
+# Spike distributions for low-prevalence constructs
+# mde(μ, σ, p) = draws Normal(μ, σ) with probability p, else 0
+
+[[randomEffect]]
+target            = "migration"
+categoricalInputs = ["uid"]
+value             = "mde(0.70,0.10,0.15)"
+
+[[randomEffect]]
+target            = "discrimination"
+categoricalInputs = ["uid"]
+value             = "mde(0.50,0.15,0.10)"
+
+[[randomEffect]]
+target            = "victimization"
+categoricalInputs = ["uid"]
+value             = "mde(0.50,0.15,0.10)"
+
+# --- Individual × wave fluctuations ---
+
+[[randomEffect]]
+target            = "wellbeing"
+categoricalInputs = ["uid", "wave"]
+value             = "norm(0,0.08)"
+
+[[randomEffect]]
+target            = "depression"
+categoricalInputs = ["uid", "wave"]
+value             = "norm(0,0.08)"
+
+[[randomEffect]]
+target            = "anxiety"
+categoricalInputs = ["uid", "wave"]
+value             = "norm(0,0.08)"
+
+[[randomEffect]]
+target            = "social_connection"
+categoricalInputs = ["uid", "wave"]
+value             = "norm(0,0.06)"
+
+[[randomEffect]]
+target            = "future_optimism"
+categoricalInputs = ["uid", "wave"]
+value             = "norm(0,0.06)"
+
+# --- School cluster effects ---
+
+[[randomEffect]]
+target            = "wellbeing"
+categoricalInputs = ["_school_id"]
+value             = "norm(0,0.04)"
+
+[[randomEffect]]
+target            = "socioeconomic"
+categoricalInputs = ["_school_id"]
+value             = "norm(0,0.05)"
+
+[[randomEffect]]
+target            = "social_connection"
+categoricalInputs = ["_school_id"]
+value             = "norm(0,0.04)"
+
+# --- Residual error terms (fresh draw per observation) ---
+
+[[randomEffect]]
+target            = "wellbeing"
+categoricalInputs = []
+value             = "norm(0,0.05)"
+
+[[randomEffect]]
+target            = "depression"
+categoricalInputs = []
+value             = "norm(0,0.05)"
+
+[[randomEffect]]
+target            = "anxiety"
+categoricalInputs = []
+value             = "norm(0,0.05)"
+
+[[randomEffect]]
+target            = "physical_health"
+categoricalInputs = []
+value             = "norm(0,0.04)"
+
+[[randomEffect]]
+target            = "social_connection"
+categoricalInputs = []
+value             = "norm(0,0.04)"
+
+# ---------------------------------------------------------------------------
+# Questionnaires
+#
+# Each [[questionnaire]] block maps to a group of BeeWell items that share
+# the same response scale (nLevels) and thematic latent variable loading(s).
+#
+# Item numbering in column names (prefix_1, prefix_2, …) follows the order
+# of items within each thematic block as they appear in the survey booklet.
+# ---------------------------------------------------------------------------
+
+# --- Q4: Migration status (3 items) ---
+# Q4a = birth parent 1 born outside UK, Q4b = birth parent 2, Q4c = you
+# 0 = No, 1 = Don't know, 2 = Yes
+# Higher migration latent → more likely to be born outside UK (score 2).
+
+[[questionnaire]]
+name      = "BW_Migration"
+prefix    = "bw_migration"
+nItems    = 3
+nLevels   = 3
+noiseSD   = 0.8
+spoilRate = 0.01
+loadings  = [{latentName = "migration", scale = 2.0}]
+
+# --- Q5: Age of arrival in the UK (1 item; conditional on Q4c = Yes) ---
+# 0 = under 1 year old … 15 = 15 years old (drop-down in 1-year increments).
+# Driven by migration latent; most non-migrants receive noise around 0.
+
+[[questionnaire]]
+name      = "BW_ArrivalAge"
+prefix    = "bw_arrival"
+nItems    = 1
+nLevels   = 16
+noiseSD   = 2.0
+spoilRate = 0.05
+loadings  = [{latentName = "migration", scale = 7.5}]
+
+# --- Q6: Life satisfaction (1 item) ---
+# "Overall, how satisfied are you with your life nowadays?"
+# 0 = Not at all … 10 = Completely
+
+[[questionnaire]]
+name      = "BW_LifeSatisfaction"
+prefix    = "bw_life_sat"
+nItems    = 1
+nLevels   = 11
+noiseSD   = 1.2
+spoilRate = 0.01
+loadings  = [
+    {latentName = "wellbeing",         scale = 9.0},
+    {latentName = "depression",        scale = -4.0},
+]
+
+# --- Q7–13: Psychological wellbeing / SWEMWBS (7 items) ---
+# "I've been feeling optimistic / useful / relaxed / dealing with problems
+#  well / thinking clearly / feeling close to other people / able to make up
+#  my own mind"
+# 0 = None of the time … 4 = All of the time
+
+[[questionnaire]]
+name      = "BW_Wellbeing_SWEMWBS"
+prefix    = "bw_wbeing"
+nItems    = 7
+nLevels   = 5
+noiseSD   = 0.6
+spoilRate = 0.01
+loadings  = [
+    {latentName = "wellbeing",         scale = 4.0},
+    {latentName = "depression",        scale = -2.0},
+    {latentName = "social_connection", scale = 0.5},
+]
+
+# --- Q14–18: Self-esteem / Rosenberg (5 items) ---
+# "On the whole, I am satisfied with myself / I feel that I have a number of
+#  good qualities / I am able to do things as well as most other people /
+#  I am a person of value / I feel good about myself"
+# Recoded: 0 = Strongly disagree … 3 = Strongly agree (higher = better)
+
+[[questionnaire]]
+name      = "BW_SelfEsteem"
+prefix    = "bw_selfest"
+nItems    = 5
+nLevels   = 4
+noiseSD   = 0.6
+spoilRate = 0.01
+loadings  = [
+    {latentName = "wellbeing",  scale = 3.0},
+    {latentName = "depression", scale = -1.5},
+]
+
+# --- Q19–21: Emotion regulation / CWMS coping subscale (3 items) ---
+# "I keep myself from losing control / I talk to someone until I feel better /
+#  I try to calmly settle the problem" (all when worried)
+# 0 = Hardly ever, 1 = Sometimes, 2 = Often
+
+[[questionnaire]]
+name      = "BW_EmoRegulation"
+prefix    = "bw_emoreg"
+nItems    = 3
+nLevels   = 3
+noiseSD   = 0.5
+spoilRate = 0.01
+loadings  = [
+    {latentName = "wellbeing", scale = 2.0},
+    {latentName = "anxiety",   scale = -1.0},
+]
+
+# --- Q22: Appearance happiness (1 item) ---
+# "How happy are you with your appearance?"
+# 0 = Very unhappy … 10 = Very happy
+
+[[questionnaire]]
+name      = "BW_Appearance"
+prefix    = "bw_appear"
+nItems    = 1
+nLevels   = 11
+noiseSD   = 1.5
+spoilRate = 0.01
+loadings  = [
+    {latentName = "wellbeing",  scale = 9.0},
+    {latentName = "depression", scale = -4.0},
+]
+
+# --- Q23–24: Stress / PSS-4 (2 items; not asked of Year 7) ---
+# "How often have you felt unable to control important things in your life? /
+#  Felt difficulties piling up so high that you could not overcome them?"
+# 0 = Never … 4 = Very often
+
+[[questionnaire]]
+name      = "BW_Stress"
+prefix    = "bw_stress"
+nItems    = 2
+nLevels   = 5
+noiseSD   = 0.7
+spoilRate = 0.01
+loadings  = [
+    {latentName = "anxiety",    scale = 4.0},
+    {latentName = "depression", scale = 1.5},
+]
+
+# --- Q25–26: Coping / PSS-4 positive items (2 items; not asked of Year 7) ---
+# "How often have you felt confident about your ability to handle personal
+#  problems? / Felt that things were going your way?"
+# 0 = Never … 4 = Very often
+
+[[questionnaire]]
+name      = "BW_Coping"
+prefix    = "bw_coping"
+nItems    = 2
+nLevels   = 5
+noiseSD   = 0.7
+spoilRate = 0.01
+loadings  = [
+    {latentName = "wellbeing", scale = 3.0},
+    {latentName = "anxiety",   scale = -2.0},
+]
+
+# --- Q27–36: Emotional difficulties / Me & My Feelings (10 items) ---
+# "I feel lonely / I am unhappy / Nobody likes me / I cry a lot /
+#  I worry when at school / I worry a lot / I have problems sleeping /
+#  I wake up in the night / I am shy / I feel scared"
+# 0 = Never, 1 = Sometimes, 2 = Always
+
+[[questionnaire]]
+name      = "BW_EmoDifficulties"
+prefix    = "bw_emodies"
+nItems    = 10
+nLevels   = 3
+noiseSD   = 0.5
+spoilRate = 0.01
+loadings  = [
+    {latentName = "depression",        scale = 1.5},
+    {latentName = "anxiety",           scale = 1.0},
+    {latentName = "social_connection", scale = -0.5},
+]
+
+# --- Q37–42: Behavioural difficulties / Me & My Feelings (6 items) ---
+# "I get very angry / I lose my temper / I hit out when I am angry /
+#  I am calm [reverse-scored] / I break things on purpose /
+#  I do things to hurt people"
+# 0 = Never, 1 = Sometimes, 2 = Always
+# Item 4 ("I am calm") is reverse-scored: driven by wellbeing rather than
+# behaviour, so high wellbeing → high score on item 4.
+
+[[questionnaire]]
+name      = "BW_BehavDifficulties"
+prefix    = "bw_behav"
+nItems    = 6
+nLevels   = 3
+noiseSD   = 0.5
+spoilRate = 0.01
+loadings  = [
+    {latentName = "behaviour", itemScales = {"1" = 2.0, "2" = 2.0, "3" = 2.0, "5" = 2.0, "6" = 2.0}},
+    {latentName = "wellbeing", itemScales = {"4" = 2.0}},
+]
+
+# --- Q43: Physical health rating (1 item) ---
+# "In general would you say your physical health is:"
+# Recoded: 0 = Poor … 4 = Excellent (higher = better)
+
+[[questionnaire]]
+name      = "BW_PhysHealth"
+prefix    = "bw_physh"
+nItems    = 1
+nLevels   = 5
+noiseSD   = 0.7
+spoilRate = 0.01
+loadings  = [{latentName = "physical_health", scale = 4.0}]
+
+# --- Q44: Sleep adequacy (1 item) ---
+# "Is the amount of sleep you get enough to feel awake and concentrate?"
+# 0 = No, 1 = Yes
+
+[[questionnaire]]
+name      = "BW_Sleep"
+prefix    = "bw_sleep"
+nItems    = 1
+nLevels   = 2
+noiseSD   = 0.4
+spoilRate = 0.01
+loadings  = [{latentName = "physical_health", scale = 1.0}]
+
+# --- Q45: Physical activity days per week (1 item) ---
+# "How many days in a usual week are you physically active?"
+# 0 = 0 days … 7 = 7 days
+
+[[questionnaire]]
+name      = "BW_PhysActDays"
+prefix    = "bw_physact"
+nItems    = 1
+nLevels   = 8
+noiseSD   = 1.0
+spoilRate = 0.01
+loadings  = [{latentName = "physical_health", scale = 6.0}]
+
+# --- Q46: Physical activity duration per active day (1 item) ---
+# "On active days, how long on average do you spend being physically active?"
+# 0 = ~0.5 h, 1 = ~1 h, 2 = ~1.5 h, 3 = ~2 h or more
+
+[[questionnaire]]
+name      = "BW_PhysActDur"
+prefix    = "bw_physdur"
+nItems    = 1
+nLevels   = 4
+noiseSD   = 0.6
+spoilRate = 0.01
+loadings  = [{latentName = "physical_health", scale = 3.0}]
+
+# --- Q47: Fruit and vegetables per day (1 item) ---
+# "How many portions of fruit or veg do you eat in a typical day?"
+# 0 = 0 portions … 5 = 5+ portions
+
+[[questionnaire]]
+name      = "BW_FruitVeg"
+prefix    = "bw_fruitveg"
+nItems    = 1
+nLevels   = 6
+noiseSD   = 0.8
+spoilRate = 0.01
+loadings  = [{latentName = "physical_health", scale = 4.0}]
+
+# --- Q48–51: Unhealthy food/drink frequency (4 items) ---
+# Item 1: sugary drinks (e.g. Monster, Coke)
+# Item 2: diet / sugar-free drinks (e.g. Diet Coke)
+# Item 3: sweets, chocolate and snacks
+# Item 4: take-away and fast food
+# "On how many days in a typical week do you eat/drink …?"
+# 0 = 0 days … 7 = 7 days
+# Higher unhealthy_diet latent → more frequent consumption.
+
+[[questionnaire]]
+name      = "BW_UnhealthyFood"
+prefix    = "bw_unhealthy"
+nItems    = 4
+nLevels   = 8
+noiseSD   = 1.0
+spoilRate = 0.01
+loadings  = [{latentName = "unhealthy_diet", scale = 7.0}]
+
+# --- Q52: Free time (1 item) ---
+# "How often can you do things that you like in your free time?"
+# 0 = Almost never … 4 = Almost always
+
+[[questionnaire]]
+name      = "BW_FreeTime"
+prefix    = "bw_freetime"
+nItems    = 1
+nLevels   = 5
+noiseSD   = 0.7
+spoilRate = 0.01
+loadings  = [
+    {latentName = "wellbeing",      scale = 3.5},
+    {latentName = "socioeconomic",  scale = 1.0},
+]
+
+# --- Q53: Social media time per day (1 item) ---
+# "On a normal weekday, how much time do you spend on social media?"
+# 0 = None, 1 = 1 h, …, 7 = 7 h+
+
+[[questionnaire]]
+name      = "BW_SocialMediaTime"
+prefix    = "bw_socmedia"
+nItems    = 1
+nLevels   = 8
+noiseSD   = 1.2
+spoilRate = 0.01
+loadings  = [{latentName = "screen_time", scale = 7.0}]
+
+# --- Q54–55: Social media use type (2 items) ---
+# Item 1 (Q54): proportion of active use (chatting, posting)
+# Item 2 (Q55): proportion of passive use (browsing, scrolling)
+# Simplified to 5-pt ordinal: 0 = none of the time … 4 = all of the time
+
+[[questionnaire]]
+name      = "BW_SocialMediaType"
+prefix    = "bw_socmtype"
+nItems    = 2
+nLevels   = 5
+noiseSD   = 1.0
+spoilRate = 0.02
+loadings  = [
+    {latentName = "social_connection", itemScales = {"1" = 3.0}},
+    {latentName = "screen_time",       itemScales = {"2" = 3.0}},
+]
+
+# --- Q56: Volunteering frequency (1 item) ---
+# "How often do you do volunteer work?"
+# 0 = Never/almost never … 5 = Most days
+
+[[questionnaire]]
+name      = "BW_Volunteering"
+prefix    = "bw_volunteer"
+nItems    = 1
+nLevels   = 6
+noiseSD   = 0.8
+spoilRate = 0.01
+loadings  = [
+    {latentName = "social_connection", scale = 3.0},
+    {latentName = "future_optimism",   scale = 1.5},
+]
+
+# --- Q57–67: Activity participation (11 items) ---
+# Item 1 (Q57): Listening to music
+# Item 2 (Q58): Cinema or theatre
+# Item 3 (Q59): Watching TV shows or films
+# Item 4 (Q60): Watching live sport
+# Item 5 (Q61): Reading for enjoyment
+# Item 6 (Q62): Youth Offer activities (youth clubs, Scouts, etc.)
+# Item 7 (Q63): Attending a religious service
+# Item 8 (Q64): Drawing, painting or making things
+# Item 9 (Q65): Computer / console gaming
+# Item 10 (Q66): Sport, exercise or physical activities (not at school)
+# Item 11 (Q67): Creative hobbies not mentioned above
+# "How often do you do the following activities when not at school?"
+# 0 = Never/almost never … 5 = Most days
+
+[[questionnaire]]
+name      = "BW_Activities"
+prefix    = "bw_activ"
+nItems    = 11
+nLevels   = 6
+noiseSD   = 0.8
+spoilRate = 0.01
+loadings  = [
+    {latentName = "wellbeing",       scale = 3.0},
+    {latentName = "physical_health", scale = 2.0},
+]
+
+# --- Q68: School belonging / connection (1 item) ---
+# "I feel that I belong/belonged at my school."
+# 0 = Not at all … 4 = A lot
+
+[[questionnaire]]
+name      = "BW_SchoolConnection"
+prefix    = "bw_schoolconn"
+nItems    = 1
+nLevels   = 5
+noiseSD   = 0.7
+spoilRate = 0.01
+loadings  = [
+    {latentName = "social_connection", scale = 3.5},
+    {latentName = "wellbeing",         scale = 1.5},
+]
+
+# --- Q69: Attainment happiness (1 item) ---
+# "How happy are you with the marks you get in school?"
+# 0 = Very unhappy … 10 = Very happy
+
+[[questionnaire]]
+name      = "BW_Attainment"
+prefix    = "bw_attain"
+nItems    = 1
+nLevels   = 11
+noiseSD   = 1.5
+spoilRate = 0.01
+loadings  = [
+    {latentName = "wellbeing",         scale = 6.0},
+    {latentName = "social_connection", scale = 3.0},
+    {latentName = "depression",        scale = -3.0},
+]
+
+# --- Q70–73: Relationships with school staff (4 items) ---
+# "At school there is an adult who: is interested in my schoolwork /
+#  believes that I will be a success / wants me to do my best /
+#  listens to me when I have something to say"
+# 0 = Never … 4 = Always
+
+[[questionnaire]]
+name      = "BW_StaffRelationships"
+prefix    = "bw_staffrel"
+nItems    = 4
+nLevels   = 5
+noiseSD   = 0.7
+spoilRate = 0.01
+loadings  = [{latentName = "social_connection", scale = 4.0}]
+
+# --- Q74: Placed in school isolation (1 item) ---
+# "Think about a typical school week. Are you ever placed in isolation?"
+# 0 = No, 1 = Yes
+
+[[questionnaire]]
+name      = "BW_Isolation"
+prefix    = "bw_iso"
+nItems    = 1
+nLevels   = 2
+noiseSD   = 0.4
+spoilRate = 0.01
+loadings  = [{latentName = "behaviour", scale = 1.0}]
+
+# --- Q75: Days per week in isolation (1 item; conditional on Q74 = Yes) ---
+# "On how many days in a typical week are you placed in isolation?"
+# 0 = 1 day … 4 = 5 days
+
+[[questionnaire]]
+name      = "BW_IsolationDays"
+prefix    = "bw_isodays"
+nItems    = 1
+nLevels   = 5
+noiseSD   = 0.8
+spoilRate = 0.01
+loadings  = [{latentName = "behaviour", scale = 4.0}]
+
+# --- Q76: Isolation duration (1 item; conditional on Q74 = Yes) ---
+# "How long does isolation typically last?"
+# 0 = 0.5 h … 12 = 6.5 h (half-hour increments; 6.5 h = full school day)
+
+[[questionnaire]]
+name      = "BW_IsolationDur"
+prefix    = "bw_isodur"
+nItems    = 1
+nLevels   = 13
+noiseSD   = 1.5
+spoilRate = 0.01
+loadings  = [{latentName = "behaviour", scale = 8.0}]
+
+# --- Q77: School pressure (1 item) ---
+# "How pressured do you feel by the schoolwork you have to do?"
+# 0 = Not at all, 1 = A little, 2 = Some, 3 = A lot
+
+[[questionnaire]]
+name      = "BW_SchoolPressure"
+prefix    = "bw_schpress"
+nItems    = 1
+nLevels   = 4
+noiseSD   = 0.6
+spoilRate = 0.01
+loadings  = [{latentName = "anxiety", scale = 3.0}]
+
+# --- Q78: Home environment happiness (1 item) ---
+# "How happy are you with the home that you live in?"
+# 0 = Very unhappy … 10 = Very happy
+
+[[questionnaire]]
+name      = "BW_HomeEnvironment"
+prefix    = "bw_homeenv"
+nItems    = 1
+nLevels   = 11
+noiseSD   = 1.5
+spoilRate = 0.01
+loadings  = [
+    {latentName = "socioeconomic", scale = 9.0},
+    {latentName = "wellbeing",     scale = 2.0},
+]
+
+# --- Q79: Safety in local area (1 item) ---
+# "How safe do you feel when in your local area?"
+# Recoded: 0 = Very unsafe, 1 = Fairly unsafe, 2 = Fairly safe,
+#          3 = Very safe, 4 = Don't know
+
+[[questionnaire]]
+name      = "BW_Safety"
+prefix    = "bw_safety"
+nItems    = 1
+nLevels   = 5
+noiseSD   = 0.8
+spoilRate = 0.02
+loadings  = [{latentName = "socioeconomic", scale = 3.0}]
+
+# --- Q80–83: Local environment quality (4 items) ---
+# "People around here support each other with their wellbeing /
+#  You can trust people around here /
+#  I could ask for help or a favour from neighbours /
+#  There are good places to spend your free time"
+# Recoded: 0 = Strongly disagree … 4 = Strongly agree (higher = better)
+
+[[questionnaire]]
+name      = "BW_LocalEnvironment"
+prefix    = "bw_localenv"
+nItems    = 4
+nLevels   = 5
+noiseSD   = 0.7
+spoilRate = 0.01
+loadings  = [
+    {latentName = "socioeconomic",     scale = 3.5},
+    {latentName = "social_connection", scale = 1.5},
+]
+
+# --- Q84: Being heard outside school/home (1 item) ---
+# "Away from school and home, there is an adult who listens to me."
+# 0 = Never … 4 = Always
+
+[[questionnaire]]
+name      = "BW_BeingHeard"
+prefix    = "bw_beinheard"
+nItems    = 1
+nLevels   = 5
+noiseSD   = 0.8
+spoilRate = 0.01
+loadings  = [{latentName = "social_connection", scale = 3.5}]
+
+# --- Q85: Food security (1 item) ---
+# "'The food that we bought just didn't last…' How often was this true?"
+# 0 = Never/almost never (food secure) … 5 = Most days (food insecure)
+# Note: higher score = MORE food insecurity, so low socioeconomic → high score.
+
+[[questionnaire]]
+name      = "BW_FoodSecurity"
+prefix    = "bw_foodsec"
+nItems    = 1
+nLevels   = 6
+noiseSD   = 0.6
+spoilRate = 0.01
+loadings  = [
+    {latentName = "socioeconomic", scale = -5.0},
+]
+
+# --- Q86: Material deprivation / possessions happiness (1 item) ---
+# "How happy are you with the things that you have (like money and things you own)?"
+# 0 = Very unhappy … 10 = Very happy
+
+[[questionnaire]]
+name      = "BW_Material"
+prefix    = "bw_material"
+nItems    = 1
+nLevels   = 11
+noiseSD   = 1.5
+spoilRate = 0.01
+loadings  = [
+    {latentName = "socioeconomic", scale = 9.0},
+    {latentName = "wellbeing",     scale = 1.5},
+]
+
+# --- Q87–93: Future readiness (7 items) ---
+# Item 1 (Q87): "I have hope and feel optimistic about my future." [all years]
+# Items 2–7 (Q88–Q93): "I feel that my generation will have a better life…" /
+#   "I am generally confident in my own skills and abilities." /
+#   "I usually cope well with most unexpected problems." /
+#   "When I finish education, I will have the skills … to be prepared for life." /
+#   "If I do well with education, I will have the same chances … of getting a job." /
+#   "I feel in control about future education, training and job prospects."
+#   [presented to Years 8–10 only; modelled here for all years]
+# Recoded: 0 = Strongly disagree … 3 = Strongly agree (higher = better)
+
+[[questionnaire]]
+name      = "BW_Future"
+prefix    = "bw_future"
+nItems    = 7
+nLevels   = 4
+noiseSD   = 0.6
+spoilRate = 0.01
+loadings  = [
+    {latentName = "future_optimism", scale = 3.0},
+    {latentName = "wellbeing",       scale = 0.5},
+    {latentName = "depression",      scale = -1.0},
+]
+
+# --- Q94: Careers education received (1 item; Year 10 only) ---
+# Multi-select across 8 types of provision (career lessons, talks, employer
+# meeting, one-to-one advisor, online tools, etc.).
+# Modelled as a count: 0 = none received … 8 = all types received.
+
+[[questionnaire]]
+name      = "BW_CareersEdReceived"
+prefix    = "bw_careersed"
+nItems    = 1
+nLevels   = 9
+noiseSD   = 1.0
+spoilRate = 0.05
+loadings  = [{latentName = "future_optimism", scale = 5.0}]
+
+# --- Q95: Careers education helpfulness (1 item; Year 10 only) ---
+# "How helpful has the careers education you have received at school been?"
+# Recoded: 0 = Not at all helpful … 3 = Very helpful
+
+[[questionnaire]]
+name      = "BW_CareersEdHelpfulness"
+prefix    = "bw_careershlp"
+nItems    = 1
+nLevels   = 4
+noiseSD   = 0.6
+spoilRate = 0.05
+loadings  = [{latentName = "future_optimism", scale = 3.0}]
+
+# --- Q96a–h: Post-Year-11 plans (8 items; Year 10 only) ---
+# One binary item per option: "Might do this after Year 11?"
+# Options: school sixth form / FE/sixth-form college / UTC or Studio School /
+#   apprenticeship/traineeship / supported internship / T level / get a job /
+#   start a business
+# 0 = No / unlikely, 1 = Might do this
+
+[[questionnaire]]
+name      = "BW_Plans"
+prefix    = "bw_plans"
+nItems    = 8
+nLevels   = 2
+noiseSD   = 0.4
+spoilRate = 0.05
+loadings  = [{latentName = "future_optimism", scale = 1.0}]
+
+# --- Q97–98: GMACS awareness and usage (2 items; Year 10 only) ---
+# Q97: "Do you know what GMACS is?"  0 = No, 1 = Yes
+# Q98: "Have you used the GMACS website in the last 12 months?"  0 = No, 1 = Yes
+
+[[questionnaire]]
+name      = "BW_GMACS"
+prefix    = "bw_gmacs"
+nItems    = 2
+nLevels   = 2
+noiseSD   = 0.4
+spoilRate = 0.05
+loadings  = [{latentName = "future_optimism", scale = 0.6}]
+
+# --- Q99–102: Relationships with parents/carers (4 items) ---
+# "At home there is an adult who: is interested in my schoolwork /
+#  believes that I will be a success / wants me to do my best /
+#  listens to me when I have something to say"
+# 0 = Never … 4 = Always
+
+[[questionnaire]]
+name      = "BW_ParentRelationships"
+prefix    = "bw_parentsrel"
+nItems    = 4
+nLevels   = 5
+noiseSD   = 0.7
+spoilRate = 0.01
+loadings  = [{latentName = "social_connection", scale = 4.0}]
+
+# --- Q103–106: Friendships and social support (4 items) ---
+# "I get along with people around me /
+#  People like to spend time with me /
+#  I feel supported by my friends /
+#  My friends care about me when times are hard"
+# 0 = Not at all … 4 = A lot
+
+[[questionnaire]]
+name      = "BW_Friendships"
+prefix    = "bw_friends"
+nItems    = 4
+nLevels   = 5
+noiseSD   = 0.7
+spoilRate = 0.01
+loadings  = [
+    {latentName = "social_connection", scale = 3.5},
+    {latentName = "depression",        scale = -1.5},
+]
+
+# --- Q107: Loneliness (1 item) ---
+# "How often do you feel lonely?"
+# 0 = Often or always … 4 = Never (higher = less lonely)
+
+[[questionnaire]]
+name      = "BW_Loneliness"
+prefix    = "bw_lonely"
+nItems    = 1
+nLevels   = 5
+noiseSD   = 0.7
+spoilRate = 0.01
+loadings  = [
+    {latentName = "social_connection", scale = 4.0},
+    {latentName = "depression",        scale = -2.0},
+]
+
+# --- Q108–112: Discrimination experiences (5 items) ---
+# "How often do people make you feel bad because of: your race/skin colour /
+#  your gender / your sexual orientation / your disability / your religion/faith?"
+# Recoded: 0 = Never … 4 = Often or always (higher = more discrimination)
+
+[[questionnaire]]
+name      = "BW_Discrimination"
+prefix    = "bw_discrim"
+nItems    = 5
+nLevels   = 5
+noiseSD   = 0.6
+spoilRate = 0.01
+loadings  = [{latentName = "discrimination", scale = 4.0}]
+
+# --- Q113a–g: Where discrimination occurred (7 binary items) ---
+# "Where did this happen?" (tick any that apply)
+# Item 1: At home
+# Item 2: Walking to or from school
+# Item 3: On public transport
+# Item 4: At school
+# Item 5: In local area
+# Item 6: Online
+# Item 7: Other
+# 0 = Did not happen there, 1 = Did happen there
+
+[[questionnaire]]
+name      = "BW_DiscrimLocation"
+prefix    = "bw_discloc"
+nItems    = 7
+nLevels   = 2
+noiseSD   = 0.4
+spoilRate = 0.01
+loadings  = [{latentName = "discrimination", scale = 1.0}]
+
+# --- Q114–116: Bullying — physical, social, cyber (3 items) ---
+# Q114: physical bullying (hit, pushed, threatened, belongings stolen)
+# Q115: social bullying (name-calling, exclusion, nasty stories)
+# Q116: cyber-bullying (mean messages, harmful images online)
+# 0 = Not bullied at all … 3 = A lot (few times/week)
+
+[[questionnaire]]
+name      = "BW_Bullying"
+prefix    = "bw_bullying"
+nItems    = 3
+nLevels   = 4
+noiseSD   = 0.5
+spoilRate = 0.01
+loadings  = [
+    {latentName = "victimization",     scale = 3.0},
+    {latentName = "social_connection", scale = -0.5},
+]
+
+# --- Q117: Access to wellbeing support (1 item) ---
+# "I have a place to seek support for worries or mental health concerns."
+# Recoded: 0 = Disagree a lot … 4 = Agree a lot (higher = better access)
+
+[[questionnaire]]
+name      = "BW_SupportAccess"
+prefix    = "bw_support"
+nItems    = 1
+nLevels   = 5
+noiseSD   = 0.7
+spoilRate = 0.01
+loadings  = [
+    {latentName = "social_connection", scale = 3.5},
+    {latentName = "socioeconomic",     scale = 1.0},
+]
+
+# --- Q118–123: Mental health contact frequency (6 items) ---
+# "In the last 12 months, how often have you had contact with … about your
+#  mental health?"
+# Item 1 (Q118): Someone in your family
+# Item 2 (Q119): A close friend
+# Item 3 (Q120): A trusted adult (not at school, not family)
+# Item 4 (Q121): A teacher
+# Item 5 (Q122): School mental health worker (MHST / counsellor)
+# Item 6 (Q123): Online help (websites, social media, self-help groups)
+# 0 = Never … 4 = Always
+# Higher distress → more frequent help-seeking
+
+[[questionnaire]]
+name      = "BW_MentalHealthContact"
+prefix    = "bw_mhcontact"
+nItems    = 6
+nLevels   = 5
+noiseSD   = 0.7
+spoilRate = 0.01
+loadings  = [
+    {latentName = "depression",        scale = 2.0},
+    {latentName = "anxiety",           scale = 1.5},
+    {latentName = "social_connection", scale = 0.5},
+]
+
+# --- Q124: Kooth usage (1 item) ---
+# "Have you heard of or used Kooth (online wellbeing service)?"
+# 0 = Never heard of it … 3 = Used and was helpful
+
+[[questionnaire]]
+name      = "BW_Kooth"
+prefix    = "bw_kooth"
+nItems    = 1
+nLevels   = 4
+noiseSD   = 0.6
+spoilRate = 0.01
+loadings  = [
+    {latentName = "depression",        scale = 1.5},
+    {latentName = "anxiety",           scale = 1.0},
+    {latentName = "social_connection", scale = 0.5},
+]

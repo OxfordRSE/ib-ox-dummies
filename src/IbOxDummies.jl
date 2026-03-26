@@ -100,6 +100,10 @@ export
     make_phq9,
     make_gad7,
     default_questionnaires,
+    beewell_questionnaires,
+    beewell_latent_variables,
+    beewell_linear_effects,
+    beewell_random_effects,
     generate_questionnaire_responses,
 
     # Latent variable system
