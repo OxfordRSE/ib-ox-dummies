@@ -19,6 +19,7 @@ jobs:
       fail-fast: false
       matrix:
         version:
+          - '1.10'
           - '1'
         os:
           - ubuntu-latest
@@ -31,6 +32,9 @@ jobs:
           version: ${{ matrix.version }}
 
       - uses: julia-actions/cache@v2
+
+      - name: Instantiate project
+        run: julia --project=. -e 'import Pkg; Pkg.instantiate()'
 
       - uses: julia-actions/julia-buildpkg@v1
 

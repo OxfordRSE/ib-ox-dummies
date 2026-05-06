@@ -52,7 +52,7 @@ are independently perturbed with Gaussian noise before students are generated.
 
 ## Requirements
 
-- Julia ≥ 1.0
+- Julia ≥ 1.10 (LTS)
 
 ## Installation
 
