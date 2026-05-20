@@ -4,9 +4,9 @@ using Distributions
 using DataFrames
 using JSON3
 
-using IbOxDummies
+using GLOWDummies
 
-@testset "IbOxDummies" begin
+@testset "GLOWDummies" begin
 
     @testset "Types" begin
         # Range
@@ -1586,4 +1586,4 @@ using IbOxDummies
         @test length(bw_cols) == 136  # 136 total bw_* questionnaire columns
     end
 
-end  # @testset "IbOxDummies"
+end  # @testset "GLOWDummies"

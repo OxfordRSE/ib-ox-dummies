@@ -186,7 +186,7 @@ Use `beewell_latent_variables()`, `beewell_linear_effects()`, and
 # Example
 
 ```julia
-using IbOxDummies
+using GLOWDummies
 
 data, schema = simulate(SimulationConfig(
     seed            = 42,

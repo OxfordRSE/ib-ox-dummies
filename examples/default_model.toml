@@ -1,4 +1,4 @@
-# IbOxDummies configuration file — default model equivalent
+# GLOWDummies configuration file — default model equivalent
 #
 # This file specifies a model that is equivalent in complexity and design to the
 # built-in defaults used when no configuration is provided, with the exception of
@@ -6,10 +6,10 @@
 # function and cannot be expressed in TOML; use the Julia API for that).
 #
 # Run with:
-#   ib_ox_dummies --config examples/default_model.toml
+#   glow_dummies --config examples/default_model.toml
 #
 # Override individual settings from the command line, e.g.:
-#   ib_ox_dummies --config examples/default_model.toml --nWaves 5 --seed 42
+#   glow_dummies --config examples/default_model.toml --nWaves 5 --seed 42
 #
 # CLI arguments take precedence over TOML values.
 

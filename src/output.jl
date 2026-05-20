@@ -54,7 +54,7 @@ function to_json_schema(schema::Schema)::String
     io = IOBuffer()
     println(io, """{
   "\$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "IbOxDummies output row",
+  "title": "GLOWDummies output row",
   "description": "One row of simulated student questionnaire data.",
   "type": "object",
   "properties": {""")

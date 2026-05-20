@@ -1,5 +1,5 @@
 """
-    IbOxDummies
+    GLOWDummies
 
 A simulator for generating realistic-ish longitudinal questionnaire data,
 designed for schoolchildren completing annual surveys.
@@ -13,7 +13,7 @@ derived from their individual latent values at each wave, composed from:
 ## Quick start
 
 ```julia
-using IbOxDummies
+using GLOWDummies
 
 # Questionnaires and latent variables must be specified explicitly.
 # Use default_questionnaires() for the built-in PHQ-9 + GAD-7 model:
@@ -26,7 +26,7 @@ data, schema = simulate(SimulationConfig(
 ))
 
 # Or load a model from a TOML config file (CLI):
-#   ib_ox_dummies --config examples/minimal_model.toml --seed 42
+#   glow_dummies --config examples/minimal_model.toml --seed 42
 
 # Write as CSV (uses CSV.jl)
 to_csv(data, schema)
@@ -53,15 +53,15 @@ data, schema = simulate(SimulationConfig(
 
 ## CLI
 
-The package provides an `ib_ox_dummies` executable.  Run it with:
+The package provides an `glow_dummies` executable.  Run it with:
 
-    ib_ox_dummies --help
+    glow_dummies --help
 
 Use `--config examples/default_model.toml` to specify questionnaires, latent variable
 loadings, effects, and demographics from a TOML file (see `examples/default_model.toml`).
 CLI arguments override any TOML values.
 """
-module IbOxDummies
+module GLOWDummies
 
 using Random
 using Distributions
@@ -137,7 +137,7 @@ export
     column_order,
 
     # CLI
-    ib_ox_dummies_cli,
+    glow_dummies_cli,
     parse_cli_args,
     parse_sampler_spec,
     parse_linear_effect,

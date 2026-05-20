@@ -483,7 +483,7 @@ function parse_cli_args(args::Vector{String})::SimulationConfig
                       "(e.g. 'depression::uid,wave:norm(0,0.15)' or 'anxiety:::norm(0,0.1)').\n\n" *
                       "Demographics weight format: \"Category1:weight1,Category2:weight2,...\" " *
                       "(e.g. 'M:0.49,F:0.49,I:0.02').",
-        prog        = "ib_ox_dummies",
+        prog        = "glow_dummies",
         add_help    = true,
         version     = "0.1.0",
         add_version = true,
@@ -698,12 +698,12 @@ function _parse_cli_custom_fields(
 end
 
 """
-    ib_ox_dummies_cli(args=ARGS)
+    glow_dummies_cli(args=ARGS)
 
-Main entry point for the `ib_ox_dummies` command-line tool.
+Main entry point for the `glow_dummies` command-line tool.
 Parses `args`, runs the simulation, and writes output to stdout.
 """
-function ib_ox_dummies_cli(args::Vector{String} = ARGS)
+function glow_dummies_cli(args::Vector{String} = ARGS)
     config = parse_cli_args(args)
     data, schema = simulate(config)
     write_output(data, schema, config)

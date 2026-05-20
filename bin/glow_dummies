@@ -1,6 +1,6 @@
 #!/usr/bin/env julia
-# IbOxDummies CLI entry point
-# Usage: ib_ox_dummies [OPTIONS]
+# GLOWDummies CLI entry point
+# Usage: glow_dummies [OPTIONS]
 
 # Locate the package relative to this script
 const _SCRIPT_DIR = @__DIR__
@@ -10,5 +10,5 @@ const _PKG_DIR    = joinpath(_SCRIPT_DIR, "..")
 import Pkg
 Pkg.activate(_PKG_DIR; io = devnull)
 
-using IbOxDummies
-IbOxDummies.ib_ox_dummies_cli(ARGS)
+using GLOWDummies
+GLOWDummies.glow_dummies_cli(ARGS)

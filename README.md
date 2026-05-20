@@ -1,4 +1,4 @@
-# ib-ox-dummies
+# glow-dummies
 
 A simulator for generating realistic mock longitudinal questionnaire data,
 designed to represent annual survey responses from schoolchildren.
@@ -59,28 +59,28 @@ are independently perturbed with Gaussian noise before students are generated.
 Clone the repository and activate the package:
 
 ```bash
-git clone https://github.com/OxfordRSE/ib-ox-dummies.git
-cd ib-ox-dummies
+git clone https://github.com/OxfordRSE/glow-dummies.git
+cd glow-dummies
 julia --project=. -e 'import Pkg; Pkg.instantiate()'
 ```
 
 To run the CLI directly:
 
 ```bash
-julia bin/ib_ox_dummies --help
+julia bin/glow_dummies --help
 ```
 
 Or add the `bin/` directory to your `PATH`:
 
 ```bash
-export PATH="$PATH:/path/to/ib-ox-dummies/bin"
-ib_ox_dummies --help
+export PATH="$PATH:/path/to/glow-dummies/bin"
+glow_dummies --help
 ```
 
 ## Usage
 
 ```
-usage: ib_ox_dummies [--config CONFIG]
+usage: glow_dummies [--config CONFIG]
                      [--nWaves NWAVES] [--nSchools NSCHOOLS]
                      [--nYeargroupsPerSchool SPEC]
                      [--nClassesPerSchoolYeargroup SPEC]
@@ -189,25 +189,25 @@ See [`examples/default_model.toml`](examples/default_model.toml) for the full de
 
 ```bash
 # Default run (3 waves, 10 schools, ~30 students/class)
-ib_ox_dummies
+glow_dummies
 
 # Small reproducible run → CSV
-ib_ox_dummies --nWaves 2 --nSchools 3 --seed 42
+glow_dummies --nWaves 2 --nSchools 3 --seed 42
 
 # JSON output with Poisson-distributed class sizes
-ib_ox_dummies --nStudentsPerClass poisson(25) --output json
+glow_dummies --nStudentsPerClass poisson(25) --output json
 
 # Full model from TOML config file (see examples/default_model.toml)
-ib_ox_dummies --config examples/default_model.toml
+glow_dummies --config examples/default_model.toml
 
 # TOML config with CLI override: use TOML model but change wave count and seed
-ib_ox_dummies --config examples/default_model.toml --nWaves 5 --seed 42
+glow_dummies --config examples/default_model.toml --nWaves 5 --seed 42
 
 # #BeeWell GM Survey — full 136-item questionnaire (see examples/beewell_model.toml)
-ib_ox_dummies --config examples/beewell_model.toml --seed 42
+glow_dummies --config examples/beewell_model.toml --seed 42
 
 # Custom demographics: equal sex split, simplified ethnicity distribution, city field
-ib_ox_dummies \
+glow_dummies \
   --sex "M:0.50,F:0.50" \
   --ethnicity "White British:0.70,Asian:0.20,Black:0.05,Other:0.05" \
   --customField "d_city=faker.city" \
@@ -215,7 +215,7 @@ ib_ox_dummies \
   --nSchools 3 --nWaves 2 --seed 1
 
 # Custom latent model via CLI: depression driven by age + individual baseline + residual
-ib_ox_dummies \
+glow_dummies \
   --latentVariables "depression" \
   --linearEffect "depression:d_age:0.02" \
   --randomEffect "depression::uid:halfnorm(0,0.2)" \
@@ -223,7 +223,7 @@ ib_ox_dummies \
   --nSchools 3 --nWaves 2 --seed 1
 
 # Print JSON Schema describing the output columns
-ib_ox_dummies --output schema
+glow_dummies --output schema
 ```
 
 ## Output
@@ -254,7 +254,7 @@ output row type, suitable for validation or code generation.
 The package can also be used programmatically from Julia:
 
 ```julia
-using IbOxDummies
+using GLOWDummies
 using Distributions
 
 # Run with all defaults — returns a DataFrame
@@ -407,13 +407,13 @@ Full implementation of the Greater Manchester [#BeeWell Survey](https://beewellp
 **Usage via TOML (CLI):**
 
 ```bash
-ib_ox_dummies --config examples/beewell_model.toml --seed 42
+glow_dummies --config examples/beewell_model.toml --seed 42
 ```
 
 **Usage via Julia API:**
 
 ```julia
-using IbOxDummies
+using GLOWDummies
 
 data, schema = simulate(SimulationConfig(
     seed            = 42,
