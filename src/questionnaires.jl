@@ -50,6 +50,76 @@ function make_gad7()::QuestionnaireSpec
 end
 
 """
+    make_phq9_overlap_control() -> QuestionnaireSpec
+
+Return a synthetic one-item questionnaire used in the canonical GLOW mock-data
+base model to exercise cross-form name clashes.
+
+The generated base column name is intentionally disambiguated as
+`phq_overlap_bw_wbeing_1` so the wide base dataset remains valid. A later
+transformation step is expected to rename this field to raw `bw_wbeing_1` when
+constructing PHQ-9 form submissions for ODK seeding.
+"""
+function make_phq9_overlap_control()::QuestionnaireSpec
+    return QuestionnaireSpec(
+        "PHQ_9_OverlapControl", "phq_overlap_bw_wbeing", 1, 4,
+        [LatentLoading("depression", 2.2)],
+        0.6, 0.01,
+    )
+end
+
+"""
+    glow_canonical_latent_variables() -> Vector{String}
+
+Return the latent variable names used by the canonical GLOW base mock-data
+model. This currently matches the BeeWell latent-variable system.
+"""
+function glow_canonical_latent_variables()::Vector{String}
+    return beewell_latent_variables()
+end
+
+"""
+    glow_canonical_linear_effects() -> Vector{LinearEffect}
+
+Return the fixed linear effects used by the canonical GLOW base mock-data
+model. This currently matches the BeeWell latent-effect system.
+"""
+function glow_canonical_linear_effects()::Vector{LinearEffect}
+    return beewell_linear_effects()
+end
+
+"""
+    glow_canonical_random_effects() -> Vector{RandomEffect}
+
+Return the random effects used by the canonical GLOW base mock-data model.
+This currently matches the BeeWell latent-effect system.
+"""
+function glow_canonical_random_effects()::Vector{RandomEffect}
+    return beewell_random_effects()
+end
+
+"""
+    glow_canonical_questionnaires() -> Vector{QuestionnaireSpec}
+
+Return the canonical GLOW base questionnaire set used to generate the clean,
+fully observed wide dataset that is later transformed into messy historical
+multi-form seed data.
+
+The set includes:
+
+- full BeeWell v2 content
+- PHQ-9
+- one synthetic PHQ overlap-control item that is later renamed during the
+  transformation step to create a deliberate raw-field clash with BeeWell
+"""
+function glow_canonical_questionnaires()::Vector{QuestionnaireSpec}
+    return vcat(
+        beewell_questionnaires(),
+        [make_phq9(), make_phq9_overlap_control()],
+    )
+end
+
+"""
     beewell_latent_variables() -> Vector{String}
 
 Return the latent variable names used by the `#BeeWell` GM Survey model.

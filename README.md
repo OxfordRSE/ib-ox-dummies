@@ -203,7 +203,10 @@ glow_dummies --config examples/default_model.toml
 # TOML config with CLI override: use TOML model but change wave count and seed
 glow_dummies --config examples/default_model.toml --nWaves 5 --seed 42
 
-# #BeeWell GM Survey — full 136-item questionnaire (see examples/beewell_model.toml)
+# Canonical GLOW base model — BeeWell v2 + demographics + PHQ-9 + overlap control
+glow_dummies --config examples/glow_model.toml --seed 42
+
+# #BeeWell GM Survey only — full 136-item questionnaire
 glow_dummies --config examples/beewell_model.toml --seed 42
 
 # Custom demographics: equal sex split, simplified ethnicity distribution, city field
@@ -239,6 +242,11 @@ Long-format tabular data with one row per student per wave:
 - A configurable *naughty monkey* randomly removes ≈0.25 % of questionnaire cells
   and ≈5 % of demographics cells to simulate real-world data quality.
 - `missing` values appear as empty strings in CSV and `null` in JSON.
+
+For GLOW's canonical mock-data workflow, this wide output is treated as a clean
+base dataset and then transformed deterministically into separate per-form seed
+CSVs, including historical form-version changes and raw cross-form field-name
+collisions.
 
 When `includeLatents = true`, additional `l_*` columns are appended (e.g. `l_depression`, `l_anxiety`)
 containing the continuous latent values used to generate the questionnaire responses.

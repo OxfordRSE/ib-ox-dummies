@@ -99,11 +99,16 @@ export
     # Questionnaire factories (return QuestionnaireSpec)
     make_phq9,
     make_gad7,
+    make_phq9_overlap_control,
     default_questionnaires,
     beewell_questionnaires,
     beewell_latent_variables,
     beewell_linear_effects,
     beewell_random_effects,
+    glow_canonical_questionnaires,
+    glow_canonical_latent_variables,
+    glow_canonical_linear_effects,
+    glow_canonical_random_effects,
     generate_questionnaire_responses,
 
     # Latent variable system
@@ -148,6 +153,7 @@ export
     parse_questionnaire_spec_from_dict,
     parse_linear_effect_from_dict,
     parse_random_effect_from_dict,
+    resolve_model_preset,
     load_toml_config
 
 end

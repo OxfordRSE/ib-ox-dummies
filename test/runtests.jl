@@ -494,6 +494,16 @@ using GLOWDummies
         @test any(q.name == "GAD_7" for q in qs)
     end
 
+    @testset "glow canonical questionnaires" begin
+        qs = glow_canonical_questionnaires()
+        @test qs isa Vector{QuestionnaireSpec}
+        @test length(qs) == 51
+        @test any(q.name == "BW_Wellbeing_SWEMWBS" for q in qs)
+        @test any(q.name == "PHQ_9" for q in qs)
+        @test any(q.name == "PHQ_9_OverlapControl" for q in qs)
+        @test any(q.prefix == "phq_overlap_bw_wbeing" for q in qs)
+    end
+
     @testset "build_schema" begin
         qs = default_questionnaires()
         schema = build_schema(qs)
@@ -1174,6 +1184,19 @@ using GLOWDummies
         @test "gad7_1" in names(data)
     end
 
+    @testset "resolve_model_preset" begin
+        default_preset = resolve_model_preset("default")
+        @test length(default_preset.questionnaires) == 2
+
+        beewell_preset = resolve_model_preset("beewell")
+        @test length(beewell_preset.questionnaires) == 49
+
+        glow_preset = resolve_model_preset("glow_canonical")
+        @test length(glow_preset.questionnaires) == 51
+        @test "wellbeing" in glow_preset.latentVariables
+        @test any(q.name == "PHQ_9_OverlapControl" for q in glow_preset.questionnaires)
+    end
+
     @testset "column_order" begin
         qs = default_questionnaires()
         schema = build_schema(qs)
@@ -1584,6 +1607,30 @@ using GLOWDummies
         # Schema should list all bw_ questionnaire columns
         bw_cols = [c for c in keys(schema.questionnaireColumns) if startswith(c, "bw_")]
         @test length(bw_cols) == 136  # 136 total bw_* questionnaire columns
+    end
+
+    @testset "glow_model.toml preset run" begin
+        glow_path = joinpath(@__DIR__, "..", "examples", "glow_model.toml")
+        toml = load_toml_config(glow_path)
+        @test toml["simulation"]["modelPreset"] == "glow_canonical"
+
+        cfg = parse_cli_args([
+            "--config", glow_path,
+            "--nWaves", "1",
+            "--nSchools", "2",
+            "--nYeargroupsPerSchool", "1",
+            "--nClassesPerSchoolYeargroup", "1",
+            "--nStudentsPerClass", "3",
+            "--seed", "42",
+        ])
+        data, schema = simulate(cfg)
+        @test data isa DataFrame
+        @test nrow(data) == 1 * 2 * 1 * 1 * 3
+        @test "bw_wbeing_1" in names(data)
+        @test "phq9_1" in names(data)
+        @test "phq_overlap_bw_wbeing_1" in names(data)
+        @test haskey(schema.questionnaireColumns, "phq_overlap_bw_wbeing_1")
+        @test schema.questionnaireColumns["phq_overlap_bw_wbeing_1"] == "PHQ_9_OverlapControl"
     end
 
 end  # @testset "GLOWDummies"

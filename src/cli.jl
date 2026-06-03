@@ -416,7 +416,8 @@ The following top-level sections are recognised by `parse_cli_args`:
 
 - `[simulation]` — scalar simulation parameters:
   `nWaves`, `nSchools`, `nYeargroupsPerSchool`, `nClassesPerSchoolYeargroup`,
-  `nStudentsPerClass`, `latentVariables` (array of strings), `seed`
+  `nStudentsPerClass`, `latentVariables` (array of strings), `seed`, and
+  optional `modelPreset`
 - `[demographics]` — demographic weight strings:
   `ethnicity`, `sex`, `genderIdentity`, `sexualOrientation`
   (each formatted as `"Category1:weight1,Category2:weight2,..."}`)
@@ -434,6 +435,48 @@ CLI arguments override values in the TOML file. See `parse_cli_args` for details
 function load_toml_config(path::AbstractString)::Dict{String,Any}
     isfile(path) || throw(ArgumentError("Config file not found: \"$path\""))
     return TOML.parsefile(path)
+end
+
+"""
+    resolve_model_preset(name) -> NamedTuple
+
+Resolve a named model preset into latent variables, effects, and questionnaire
+specifications.
+
+Supported presets:
+
+- `default` or `default_model`
+- `beewell`, `bewell`, or `beewell_model`
+- `glow_canonical`, `glow`, or `glow_model`
+"""
+function resolve_model_preset(name::AbstractString)
+    key = lowercase(strip(name))
+    if key in ("default", "default_model")
+        return (
+            latentVariables = default_latent_variables(),
+            linearEffects = default_linear_effects(),
+            randomEffects = default_random_effects(),
+            questionnaires = default_questionnaires(),
+        )
+    elseif key in ("beewell", "bewell", "beewell_model")
+        return (
+            latentVariables = beewell_latent_variables(),
+            linearEffects = beewell_linear_effects(),
+            randomEffects = beewell_random_effects(),
+            questionnaires = beewell_questionnaires(),
+        )
+    elseif key in ("glow_canonical", "glow", "glow_model")
+        return (
+            latentVariables = glow_canonical_latent_variables(),
+            linearEffects = glow_canonical_linear_effects(),
+            randomEffects = glow_canonical_random_effects(),
+            questionnaires = glow_canonical_questionnaires(),
+        )
+    end
+
+    throw(ArgumentError(
+        "Unknown modelPreset: \"$name\". Supported presets: default, beewell, glow_canonical."
+    ))
 end
 
 """
@@ -566,6 +609,7 @@ function parse_cli_args(args::Vector{String})::SimulationConfig
     toml     = isnothing(parsed["config"]) ? Dict{String,Any}() : load_toml_config(parsed["config"])
     sim_toml = get(toml, "simulation", Dict{String,Any}())
     dem_toml = get(toml, "demographics", Dict{String,Any}())
+    preset   = haskey(sim_toml, "modelPreset") ? resolve_model_preset(string(sim_toml["modelPreset"])) : nothing
 
     # --- Scalar simulation parameters: CLI > TOML > built-in default ---
     nWaves   = something(parsed["nWaves"],   get(sim_toml, "nWaves",   nothing), 3)
@@ -587,6 +631,8 @@ function parse_cli_args(args::Vector{String})::SimulationConfig
         filter(!isempty, strip.(split(parsed["latentVariables"], ',')))
     elseif haskey(sim_toml, "latentVariables")
         String[string(v) for v in sim_toml["latentVariables"]]
+    elseif !isnothing(preset)
+        preset.latentVariables
     else
         String[]
     end
@@ -596,6 +642,8 @@ function parse_cli_args(args::Vector{String})::SimulationConfig
         LinearEffect[parse_linear_effect(string(e)) for e in parsed["linearEffect"]]
     elseif haskey(toml, "linearEffect")
         LinearEffect[parse_linear_effect_from_dict(d) for d in toml["linearEffect"]]
+    elseif !isnothing(preset)
+        preset.linearEffects
     else
         LinearEffect[]
     end
@@ -605,6 +653,8 @@ function parse_cli_args(args::Vector{String})::SimulationConfig
         RandomEffect[parse_random_effect(string(e)) for e in parsed["randomEffect"]]
     elseif haskey(toml, "randomEffect")
         RandomEffect[parse_random_effect_from_dict(d) for d in toml["randomEffect"]]
+    elseif !isnothing(preset)
+        preset.randomEffects
     else
         RandomEffect[]
     end
@@ -612,6 +662,8 @@ function parse_cli_args(args::Vector{String})::SimulationConfig
     # --- Questionnaires: TOML only (complex spec; no CLI equivalent) ---
     questionnaires = if haskey(toml, "questionnaire")
         QuestionnaireSpec[parse_questionnaire_spec_from_dict(d) for d in toml["questionnaire"]]
+    elseif !isnothing(preset)
+        preset.questionnaires
     else
         QuestionnaireSpec[]
     end
