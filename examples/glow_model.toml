@@ -1,0 +1,35 @@
+# GLOWDummies canonical GLOW base model
+#
+# This is the canonical generator input for GLOW mock-data work.
+#
+# It produces a clean 3-wave base dataset in which every school has the same
+# three collection waves and every student row contains:
+#
+# - full BeeWell v2 questionnaire content
+# - standard demographics and year-group progression
+# - PHQ-9
+# - one extra synthetic overlap-control item whose base column name is
+#   `phq_overlap_bw_wbeing_1`
+#
+# That overlap-control item is deliberately disambiguated in the base dataset so
+# the wide CSV remains valid. The downstream GLOW transformation step renames it
+# to raw `bw_wbeing_1` only when constructing PHQ-9 form submissions, creating a
+# real cross-form name clash in the final per-form ODK seed data.
+#
+# This file is intentionally concise: the heavy questionnaire and latent-model
+# definitions live in the Julia package and are selected by `modelPreset`.
+#
+# Run with:
+#   glow_dummies --config examples/glow_model.toml --seed 42
+#
+# Or override counts for a smaller reproducible run:
+#   glow_dummies --config examples/glow_model.toml --nSchools 3 --nWaves 3 --seed 42
+
+[simulation]
+modelPreset                = "glow_canonical"
+nWaves                     = 3
+nSchools                   = 20
+nYeargroupsPerSchool       = "5"
+nClassesPerSchoolYeargroup = "1:5"
+nStudentsPerClass          = "norm(30,7)"
+# seed = 42
